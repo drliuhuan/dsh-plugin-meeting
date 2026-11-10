@@ -2182,8 +2182,6 @@
                   }))),
                 h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
                   h('button', { type: 'button', className: 'dshm-btn', 'data-kind': 'primary', onClick: saveProfile }, '保存我的信息'))),
-                h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
-                  h('button', { type: 'button', className: 'dshm-btn', 'data-kind': 'primary', onClick: saveProfile }, '保存我的信息'))),
               h('div', {
                 className: 'dshm-card', 'data-drag': dragOver ? 'true' : 'false',
                 onDragOver: function (event) { event.preventDefault(); setDragOver(true); },
