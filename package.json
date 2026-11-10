@@ -1,0 +1,56 @@
+{
+  "name": "dsh-plugin-meeting",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness Web UI plugin: capture meeting system audio, transcribe with local SenseVoice, let DSH's LLM correct domain wording and optionally translate, keep a live summary, and answer questions from the meeting with web lookup.",
+  "type": "module",
+  "license": "MIT",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib",
+    "native",
+    "scripts",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "README.md",
+    "README.zh.md",
+    "icon.svg"
+  ],
+  "scripts": {
+    "check": "node --check index.js && node --check client.js && node --check lib/meeting.mjs && node --check lib/routes.mjs && node --check lib/audio.mjs && node --check lib/native.mjs && node --check lib/asr.mjs && node --check lib/ai.mjs && node --check lib/speaker.mjs && node --check lib/agenda.mjs && node --check lib/util.mjs",
+    "selftest": "node scripts/selftest.mjs",
+    "native:build": "node scripts/build-native.mjs",
+    "native:check": "node scripts/build-native.mjs --check"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "meeting",
+    "meeting-assistant",
+    "transcription",
+    "translation",
+    "sensevoice",
+    "meeting-minutes"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

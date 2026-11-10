@@ -1,0 +1,4 @@
+{
+  "title": "Meeting Assistant",
+  "description": "Capture meeting system audio, transcribe locally with SenseVoice, let the DSH model correct domain wording and optionally translate, keep a live summary, and answer questions with web lookup."
+}
