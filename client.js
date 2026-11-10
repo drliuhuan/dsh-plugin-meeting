@@ -881,7 +881,7 @@
                     onChange: function (event) { setCustomName(event.target.value); }
                   }),
                   h('input', {
-                    className: 'dshm-input', value: customOrg, placeholder: '单位（可选）',
+                    className: 'dshm-input', value: customOrg, placeholder: '单位',
                     onChange: function (event) { setCustomOrg(event.target.value); }
                   }),
                   h('button', {
@@ -1112,6 +1112,16 @@
             : turnsFromTranscript(transcript);
           var visibleTurns = turns.slice(-80);
           var correctionErrors = transcript.filter(function (line) { return line.correctionStatus === 'error'; }).length;
+          // The setup flow opens for a new meeting, and whenever the meeting
+          // context is still empty; it must start at step ①, not at whatever
+          // scroll offset the transcript had.
+          var setupEntries = snapshot && snapshot.agenda && Array.isArray(snapshot.agenda.entries)
+            ? snapshot.agenda.entries
+            : [];
+          var wizardVisible = !active && (forceWizard || (!wizardDismissed && (
+            setupEntries.length === 0
+            || String(form.topic || '').trim().length === 0
+            || !form.role)));
 
           function notify(message, tone) {
             setToast({ message: message, tone: tone || 'info' });
@@ -1397,10 +1407,18 @@
           }, [historyOpen]);
 
           React.useEffect(function () {
+            if (!wizardVisible || !bodyRef.current) return;
+            bodyRef.current.scrollTop = 0;
+            atBottomRef.current = false;
+            setFollowing(false);
+          }, [wizardVisible]);
+
+          React.useEffect(function () {
+            if (wizardVisible) return;
             if (tab !== 'transcript' || showSettings || !bodyRef.current || !atBottomRef.current) return;
             bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
             setFollowing(true);
-          }, [tab, showSettings, turns.length, turns.length > 0 ? turns[turns.length - 1].text : '', recognizing]);
+          }, [tab, showSettings, wizardVisible, turns.length, turns.length > 0 ? turns[turns.length - 1].text : '', recognizing]);
 
           React.useEffect(function () {
             if (tab !== 'qa' || showSettings || !bodyRef.current || !atBottomRef.current) return;
@@ -2099,7 +2117,7 @@
             };
             return h('div', { className: 'dshm-section' },
               h('div', { className: 'dshm-card' },
-                h('div', { className: 'dshm-cardTitle' }, '① 我是谁', h('span', { className: 'dshm-muted' }, '永久保存')),
+                h('div', { className: 'dshm-cardTitle' }, '① 我是谁'),
                 h('div', { className: 'dshm-grid' },
                   field('我的姓名', h('input', {
                     className: 'dshm-input', value: profile.userName, placeholder: '例如：张医生',
@@ -2120,7 +2138,7 @@
                 onDragLeave: function (event) { event.preventDefault(); setDragOver(false); },
                 onDrop: onAgendaDrop
               },
-                h('div', { className: 'dshm-cardTitle' }, '② 导入会议日程', h('span', { className: 'dshm-muted' }, 'AI 解析成结构化日程')),
+                h('div', { className: 'dshm-cardTitle' }, '② 导入会议日程'),
                 h('p', { className: 'dshm-muted' }, '支持 txt / md / csv / json、PDF / Word / PPT / Excel 和截图。也可以直接粘贴日程文字，或把截图/文件粘贴到框里（Ctrl+V）。'),
                 h('div', { className: 'dshm-row' },
                   h('label', { className: 'dshm-btn', 'data-kind': 'small', style: { cursor: 'pointer' } },
@@ -2149,7 +2167,7 @@
                   ? h('div', { className: 'dshm-warning', style: { marginTop: '6px' } }, agendaWarnings.join('；'))
                   : null),
               h('div', { className: 'dshm-card' },
-                h('div', { className: 'dshm-cardTitle' }, '③ 确认会议信息', h('span', { className: 'dshm-muted' }, '都能改')),
+                h('div', { className: 'dshm-cardTitle' }, '③ 确认会议信息'),
                 h('div', { className: 'dshm-grid' },
                   field('会议主题', h('input', {
                     className: 'dshm-input', value: form.topic, placeholder: '会议主题',
@@ -2159,7 +2177,7 @@
                     className: 'dshm-select', value: form.domain,
                     onChange: function (event) { update('domain', event.target.value); }
                   }, DOMAINS.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); }))),
-                  field('我在会议中的角色（AI 按日程判断，可改）', h('select', {
+                  field('我在会议中的角色', h('select', {
                     className: 'dshm-select', value: form.role,
                     onChange: function (event) { update('role', event.target.value); }
                   }, ROLES.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); }))),
@@ -2219,14 +2237,14 @@
           function renderSettings() {
             return h('div', { className: 'dshm-section' },
               h('div', { className: 'dshm-card' },
-                h('div', { className: 'dshm-cardTitle' }, '我的信息', h('span', { className: 'dshm-muted' }, '永久保存在本机，重启不丢')),
+                h('div', { className: 'dshm-cardTitle' }, '我的信息'),
                 h('p', { className: 'dshm-muted' }, '填写姓名后，只有当日程里出现你的名字时，插件才会为你生成「讲词」和「串词」；不会替别人写稿。'),
                 h('div', { className: 'dshm-grid' },
                   field('我的姓名', h('input', {
                     className: 'dshm-input', value: profile.userName, placeholder: '例如：张医生',
                     onChange: function (event) { setProfile(Object.assign({}, profile, { userName: event.target.value })); }
                   })),
-                  field('我的单位（可选）', h('input', {
+                  field('我的单位', h('input', {
                     className: 'dshm-input', value: profile.userOrg, placeholder: '例如：市医院',
                     onChange: function (event) { setProfile(Object.assign({}, profile, { userOrg: event.target.value })); }
                   }))
@@ -2246,7 +2264,7 @@
                 )
               ),
               h('div', { className: 'dshm-card' },
-                h('div', { className: 'dshm-cardTitle' }, '会议上下文', h('span', { className: 'dshm-muted' }, '会议领域会永久保存；也可由日程自动识别')),
+                h('div', { className: 'dshm-cardTitle' }, '会议上下文'),
                 h('div', { className: 'dshm-grid' },
                   field('会议主题', h('input', {
                     className: 'dshm-input', value: form.topic, placeholder: '例如：2026 Q3 产品路线图评审',
@@ -2266,7 +2284,7 @@
                       onChange: function (event) { update('customDomain', event.target.value); }
                     }))
                     : null,
-                  field('会议标题（可选）', h('input', {
+                  field('会议标题', h('input', {
                     className: 'dshm-input', value: form.title, placeholder: '留空自动使用日期',
                     onChange: function (event) { update('title', event.target.value); }
                   })),
@@ -2329,7 +2347,7 @@
                     }))))
                   : null,
                 h('div', { className: 'dshm-field', style: { marginTop: '8px' } },
-                  h('span', null, '术语表（可选，每行一个，格式：原文=期望写法）'),
+                  h('span', null, '术语表（原文=期望写法，每行一条）'),
                   h('textarea', {
                     className: 'dshm-textarea', value: form.glossary, rows: 2,
                     placeholder: '例如：DSH=DeepSeek Harness\nSenseVoice=本地语音识别',
@@ -2425,8 +2443,7 @@
                 : null,
               active && active.speakers && active.speakers.length > 0
                 ? h('div', { className: 'dshm-card' },
-                  h('div', { className: 'dshm-cardTitle' }, '识别到的发言人',
-                    h('span', { className: 'dshm-muted' }, active.speakerState && active.speakerState.phase === 'error' ? '声纹模型不可用' : '按音色聚类')),
+                  h('div', { className: 'dshm-cardTitle' }, '识别到的发言人'),
                   h('p', { className: 'dshm-muted' }, '这只是“同一个人”的分组，不知道真实姓名。可以改成「张医生」「客户」等，后续纪要和问答会使用这些名字。'),
                   active.speakers.map(function (speaker) {
                     return h('label', { key: speaker.id + ':' + speaker.name + ':' + (speaker.org || ''), className: 'dshm-speakerRow' },
@@ -2446,7 +2463,7 @@
                       }),
                       h('input', {
                         className: 'dshm-input dshm-orgInput', defaultValue: speaker.org || '', 'data-role': 'org',
-                        placeholder: '单位（可选）',
+                        placeholder: '单位',
                         onBlur: function (event) {
                           var row = event.target.parentElement;
                           var name = row.querySelector('[data-role="name"]');
@@ -2469,19 +2486,7 @@
 
           function renderTranscript() {
             if (!active) {
-              // The setup flow is no longer tied to "a meeting happened today":
-              // it opens for a new meeting, and whenever the meeting topic,
-              // agenda or my role is still empty/default.
-              var wizardAgenda = snapshot && snapshot.agenda && Array.isArray(snapshot.agenda.entries)
-                ? snapshot.agenda.entries
-                : [];
-              var needsSetup = forceWizard
-                || (!wizardDismissed && (
-                  wizardAgenda.length === 0
-                  || String(form.topic || '').trim().length === 0
-                  || !form.role
-                ));
-              if (needsSetup && !showSettings) {
+              if (wizardVisible && !showSettings) {
                 return renderWizard();
               }
               return h('div', { className: 'dshm-empty' },
@@ -2608,8 +2613,7 @@
                   .map(function (entry, index) { return { entry: entry, index: index }; })
                   .filter(function (item) { return item.entry && nameMatches(item.entry.speaker, userName); });
                 return h('div', { className: 'dshm-card' },
-                  h('div', { className: 'dshm-cardTitle' }, '我的串词',
-                    h('span', { className: 'dshm-muted' }, '到我的环节前 2 分钟自动生成，结合日程和已经听到的内容')),
+                  h('div', { className: 'dshm-cardTitle' }, '我的串词'),
                   cues.length > 0
                     ? cues.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).map(function (cue) {
                       return h('div', { key: cue.key, className: 'dshm-cue' },
@@ -2673,8 +2677,7 @@
                     ownEntries.length > 0 ? '点「重新生成」生成属于你的讲词与串词。' : '')
               ),
               h('div', { className: 'dshm-card' },
-                h('div', { className: 'dshm-cardTitle' }, '生成提示词',
-                  h('span', { className: 'dshm-muted' }, '只影响我的讲词和串词')),
+                h('div', { className: 'dshm-cardTitle' }, '生成提示词'),
                 h('p', { className: 'dshm-muted' }, '这是写给模型的「写作要求」，可以改成你想要的风格、长度或重点；留空则使用默认提示词。修改后点「用这个提示词重新生成」。'),
                 h('textarea', {
                   className: 'dshm-textarea', rows: 8, value: scriptPrompt,
