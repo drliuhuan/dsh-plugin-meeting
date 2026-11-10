@@ -2231,7 +2231,7 @@
                   field('我在会议中的角色', h('select', {
                     className: 'dshm-select', value: form.role,
                     onChange: function (event) { update('role', event.target.value); }
-                  }, ROLES.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); }))),
+                  }, ROLES.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); })))),
                 renderAgendaTable(),
                 h('label', { className: 'dshm-check', style: { marginTop: '8px' } },
                   h('input', {
