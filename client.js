@@ -195,7 +195,6 @@
       '.dshm-menuItem:hover{background:rgba(127,176,255,.16)}',
       '.dshm-menuItem[data-current="true"]{background:rgba(127,176,255,.24);font-weight:650}',
       '.dshm-menuInline{position:static;margin:6px 0 0;max-height:260px}',
-      '.dshm-panel{position:relative}',
       '.dshm-dropOverlay{position:absolute;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;',
       'font-size:12px;color:var(--dsw-alias-state-business-primary,#7fb0ff);background:color-mix(in srgb,var(--dsw-alias-bg-base,#141414) 82%,transparent);',
       'border:2px dashed var(--dsw-alias-state-business-primary,#3f7cff);border-radius:12px;pointer-events:none}',
