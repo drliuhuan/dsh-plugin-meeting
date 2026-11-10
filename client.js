@@ -201,19 +201,22 @@
       '.dshm-menuLabel{font-size:9.5px;color:var(--dsw-alias-label-caption,#777);padding:4px 8px 2px}',
       '.dshm-menuCustom{display:grid;grid-template-columns:1fr 1fr auto;gap:4px;padding:6px 8px 2px;border-top:1px solid rgba(255,255,255,.1);margin-top:4px}',
       '.dshm-sessions{display:flex;flex-direction:column;margin-top:8px}',
-      '.dshm-session{padding:8px 0;border-top:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.1))}',
-      '.dshm-session:first-child{border-top:0;padding-top:2px}',
-      '.dshm-sessionHead{display:grid;grid-template-columns:86px auto 86px minmax(0,1fr) auto;gap:5px;align-items:center}',
-      '.dshm-sessionDash{color:var(--dsw-alias-label-caption,#777);font-size:11px;text-align:center}',
-      '.dshm-sessionTopic{min-width:0}',
-      '.dshm-people{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}',
-      '.dshm-person{display:grid;grid-template-columns:minmax(64px,1fr) minmax(64px,1fr) auto;gap:4px;align-items:center;',
-      'border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.1));border-radius:8px;padding:3px 4px}',
-      '.dshm-timeInput{width:86px;font-family:ui-monospace,Consolas,monospace;font-size:11px;color-scheme:dark}',
+      '.dshm-session{padding:6px 0}',
+      '.dshm-session + .dshm-session{margin-top:14px;padding-top:14px;border-top:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.16))}',
+      '.dshm-sessionHead{display:grid;grid-template-columns:minmax(0,25%) minmax(0,1fr) auto;gap:6px;align-items:center}',
+      '.dshm-sessionTimes{display:flex;align-items:center;gap:2px;min-width:0}',
+      '.dshm-sessionDash{color:var(--dsw-alias-label-caption,#777);font-size:10px;flex:none}',
+      '.dshm-people{display:flex;flex-direction:column;gap:4px;margin-top:6px;padding-left:2px}',
+      '.dshm-person{display:grid;grid-template-columns:20px minmax(0,1fr) minmax(0,1fr);gap:5px;align-items:center;min-width:0}',
+      '.dshm-personDel,.dshm-personPlus{width:20px;height:20px;font-size:11px;border-radius:5px;flex:none}',
+      '.dshm-personDel:hover{color:#ff9a9a}',
+      '.dshm-personPlus:hover{color:var(--dsw-alias-state-business-primary,#7fb0ff)}',
+      '.dshm-linkBtn{appearance:none;border:none;background:0 0;padding:0 0 0 5px;color:var(--dsw-alias-label-secondary,#b9b9b9);font:inherit;font-size:11px;text-align:left;cursor:pointer}',
+      '.dshm-linkBtn:hover{color:var(--dsw-alias-label-primary,#f2f2f2)}',
+      '.dshm-timeInput{width:100%;min-width:0;padding:2px 1px;font-family:ui-monospace,Consolas,monospace;font-size:10.5px;color-scheme:dark}',
       '.dshm-table{display:flex;flex-direction:column;gap:5px;margin-top:7px}',
       '.dshm-tableRow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) 26px;gap:4px;align-items:center}',
       '.dshm-tableHead{font-size:10px;color:var(--dsw-alias-label-caption,#777);gap:4px}',
-      '.dshm-timeInput{font-family:ui-monospace,Consolas,monospace;font-size:11px}',
       '.dshm-cue{padding:7px 0;border-top:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.08))}',
       '.dshm-cue:first-of-type{border-top:0}',
       '.dshm-cueText{margin:4px 0 0;font-size:12px;line-height:1.65;white-space:pre-wrap}',
@@ -1842,29 +1845,38 @@
               agendaRows.map(function (row, index) {
                 var people = Array.isArray(row.participants) ? row.participants : [];
                 return h('div', { key: 'agendaRow' + index, className: 'dshm-session' },
+                  // One line: compact time range (about a quarter of the width),
+                  // then the session topic, then the delete-session control.
                   h('div', { className: 'dshm-sessionHead' },
+                    h('div', { className: 'dshm-sessionTimes' },
+                      h('input', {
+                        type: 'time', className: 'dshm-input dshm-timeInput', value: row.start,
+                        title: '开始时间',
+                        onChange: function (event) { updateRow(index, 'start', event.target.value); }
+                      }),
+                      h('span', { className: 'dshm-sessionDash' }, '—'),
+                      h('input', {
+                        type: 'time', className: 'dshm-input dshm-timeInput', value: row.end,
+                        title: '结束时间',
+                        onChange: function (event) { updateRow(index, 'end', event.target.value); }
+                      })),
                     h('input', {
-                      type: 'time', className: 'dshm-input dshm-timeInput', value: row.start,
-                      title: '开始时间',
-                      onChange: function (event) { updateRow(index, 'start', event.target.value); }
-                    }),
-                    h('span', { className: 'dshm-sessionDash' }, '—'),
-                    h('input', {
-                      type: 'time', className: 'dshm-input dshm-timeInput', value: row.end,
-                      title: '结束时间',
-                      onChange: function (event) { updateRow(index, 'end', event.target.value); }
-                    }),
-                    h('input', {
-                      className: 'dshm-input dshm-sessionTopic', value: row.topic, placeholder: '主题 / 环节',
+                      className: 'dshm-input dshm-sessionTopic', value: row.topic, placeholder: '环节名称',
                       onChange: function (event) { updateRow(index, 'topic', event.target.value); }
                     }),
                     h('button', {
-                      type: 'button', className: 'dshm-iconBtn', title: '删除这个时段',
+                      type: 'button', className: 'dshm-iconBtn dshm-sessionDel', title: '删除这个时段',
                       onClick: function () { removeSession(index); }
                     }, '✕')),
+                  // Participants sit under it; the ＋ of "＋ 参与人" lines up
+                  // exactly with the ✕ of every participant row.
                   h('div', { className: 'dshm-people' },
                     people.map(function (person, personIndex) {
                       return h('div', { key: 'person' + index + '-' + personIndex, className: 'dshm-person' },
+                        h('button', {
+                          type: 'button', className: 'dshm-iconBtn dshm-personDel', title: '移除参与人',
+                          onClick: function () { removeParticipant(index, personIndex); }
+                        }, '✕'),
                         h('input', {
                           className: 'dshm-input', value: person.name, placeholder: '姓名',
                           onChange: function (event) { updateParticipant(index, personIndex, 'name', event.target.value); }
@@ -1872,18 +1884,19 @@
                         h('input', {
                           className: 'dshm-input', value: person.org, placeholder: '单位',
                           onChange: function (event) { updateParticipant(index, personIndex, 'org', event.target.value); }
-                        }),
-                        h('button', {
-                          type: 'button', className: 'dshm-iconBtn', title: '移除参与人',
-                          onClick: function () { removeParticipant(index, personIndex); }
-                        }, '✕'));
+                        }));
                     }),
-                    h('button', {
-                      type: 'button', className: 'dshm-btn', 'data-kind': 'ghost', 'data-size': 'small',
-                      onClick: function () { addParticipant(index); }
-                    }, '＋ 参与人')));
+                    h('div', { className: 'dshm-person dshm-personAdd' },
+                      h('button', {
+                        type: 'button', className: 'dshm-iconBtn dshm-personPlus', title: '添加参与人',
+                        onClick: function () { addParticipant(index); }
+                      }, '＋'),
+                      h('button', {
+                        type: 'button', className: 'dshm-linkBtn',
+                        onClick: function () { addParticipant(index); }
+                      }, '参与人'))));
               }),
-              h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
+              h('div', { className: 'dshm-row', style: { marginTop: '10px' } },
                 h('button', {
                   type: 'button', className: 'dshm-btn', 'data-kind': 'ghost',
                   onClick: addSession
