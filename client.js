@@ -1839,18 +1839,27 @@
             if (file) applyAgendaFile(file);
           }
 
+          // Paste an agenda: a screenshot *or* a copied file (PDF / Word / PPT /
+          // Excel / txt). Images are files too, so one branch covers both.
           function onAgendaPaste(event) {
-            var items = event.clipboardData && event.clipboardData.items ? event.clipboardData.items : [];
+            var data = event.clipboardData;
+            if (!data) return;
+            var files = [];
+            var items = data.items ? data.items : [];
             for (var i = 0; i < items.length; i += 1) {
-              if (items[i].type && items[i].type.indexOf('image/') === 0) {
-                var file = items[i].getAsFile();
-                if (file) {
-                  event.preventDefault();
-                  applyAgendaFile(file);
-                  return;
-                }
-              }
+              var item = items[i];
+              if (!item || item.kind !== 'file') continue;
+              var picked = item.getAsFile ? item.getAsFile() : null;
+              if (picked) files.push(picked);
             }
+            if (files.length === 0 && data.files && data.files.length > 0) {
+              files = Array.prototype.slice.call(data.files);
+            }
+            // A plain text paste must reach the textarea untouched.
+            if (files.length === 0) return;
+            event.preventDefault();
+            applyAgendaFile(files[0]);
+            if (files.length > 1) notify('一次只能解析一个日程文件，已使用：' + (files[0].name || '剪贴板文件'));
           }
 
           function refreshDevices() {
@@ -2113,7 +2122,7 @@
                 onDrop: onAgendaDrop
               },
                 h('div', { className: 'dshm-cardTitle' }, '② 导入会议日程', h('span', { className: 'dshm-muted' }, 'AI 解析成结构化日程')),
-                h('p', { className: 'dshm-muted' }, '支持 txt / md / csv / json、PDF / Word / PPT / Excel 和截图。也可以直接粘贴日程文字，或把日程截图粘贴到框里。'),
+                h('p', { className: 'dshm-muted' }, '支持 txt / md / csv / json、PDF / Word / PPT / Excel 和截图。也可以直接粘贴日程文字，或把截图/文件粘贴到框里（Ctrl+V）。'),
                 h('div', { className: 'dshm-row' },
                   h('label', { className: 'dshm-btn', 'data-kind': 'small', style: { cursor: 'pointer' } },
                     '上传 / 拖入日程',
@@ -2371,7 +2380,7 @@
                 ),
                 h('textarea', {
                   className: 'dshm-textarea', rows: 3, value: agendaDraft, style: { marginTop: '7px' },
-                  placeholder: '14:00-14:30 张医生（市医院） 创面修复病例分享\n14:30-15:00 李主任（省医院）：糖尿病足多学科协作\n\n也可以直接把日程截图粘贴到这里（Ctrl+V）',
+                  placeholder: '14:00-14:30 张医生（市医院） 创面修复病例分享\n14:30-15:00 李主任（省医院）：糖尿病足多学科协作\n\n也可以直接粘贴日程文字、截图或文件（Ctrl+V）',
                   onChange: function (event) { setAgendaDraft(event.target.value); setAgendaFilename(''); setAgendaSource(''); },
                   onPaste: onAgendaPaste
                 }),
