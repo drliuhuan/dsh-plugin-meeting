@@ -121,6 +121,21 @@ assert.equal(ocrParsed.entries.length, 2);
 assert.equal(ocrParsed.entries[0].speaker, '张医生');
 assert.equal(ocrParsed.entries[1].topic, '讨论');
 
+// One session can list several participants; speaker/org stay as joined text
+// for every prompt and display path.
+const multiSession = parseAgenda(JSON.stringify([{
+  start: '14:00',
+  end: '14:30',
+  topic: '圆桌讨论',
+  participants: [
+    { name: '张医生', org: '市医院' },
+    { name: '李主任', org: '省医院' }
+  ]
+}]), 'multi.json');
+assert.equal(multiSession.entries[0].participants.length, 2);
+assert.equal(multiSession.entries[0].speaker, '张医生、李主任');
+assert.equal(multiSession.entries[0].org, '市医院、省医院');
+
 function crc32(buffer) {
   let crc = 0xffffffff;
   for (const byte of buffer) {

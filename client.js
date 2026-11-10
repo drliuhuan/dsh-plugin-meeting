@@ -200,6 +200,16 @@
       'border:2px dashed var(--dsw-alias-state-business-primary,#3f7cff);border-radius:12px;pointer-events:none}',
       '.dshm-menuLabel{font-size:9.5px;color:var(--dsw-alias-label-caption,#777);padding:4px 8px 2px}',
       '.dshm-menuCustom{display:grid;grid-template-columns:1fr 1fr auto;gap:4px;padding:6px 8px 2px;border-top:1px solid rgba(255,255,255,.1);margin-top:4px}',
+      '.dshm-sessions{display:flex;flex-direction:column;margin-top:8px}',
+      '.dshm-session{padding:8px 0;border-top:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.1))}',
+      '.dshm-session:first-child{border-top:0;padding-top:2px}',
+      '.dshm-sessionHead{display:grid;grid-template-columns:86px auto 86px minmax(0,1fr) auto;gap:5px;align-items:center}',
+      '.dshm-sessionDash{color:var(--dsw-alias-label-caption,#777);font-size:11px;text-align:center}',
+      '.dshm-sessionTopic{min-width:0}',
+      '.dshm-people{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}',
+      '.dshm-person{display:grid;grid-template-columns:minmax(64px,1fr) minmax(64px,1fr) auto;gap:4px;align-items:center;',
+      'border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.1));border-radius:8px;padding:3px 4px}',
+      '.dshm-timeInput{width:86px;font-family:ui-monospace,Consolas,monospace;font-size:11px;color-scheme:dark}',
       '.dshm-table{display:flex;flex-direction:column;gap:5px;margin-top:7px}',
       '.dshm-tableRow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) 26px;gap:4px;align-items:center}',
       '.dshm-tableHead{font-size:10px;color:var(--dsw-alias-label-caption,#777);gap:4px}',
@@ -393,29 +403,41 @@
   }
 
   // Editable agenda table: the same shape in the setup flow and in settings.
+  // One row is one session: a time range, a topic and any number of people.
   function rowsFromEntries(entries) {
     return (Array.isArray(entries) ? entries : []).map(function (entry) {
+      var people = [];
+      if (entry && Array.isArray(entry.participants) && entry.participants.length > 0) {
+        people = entry.participants.map(function (person) {
+          return { name: (person && person.name) || '', org: (person && person.org) || '' };
+        });
+      } else if (entry && (entry.speaker || entry.org)) {
+        people = [{ name: entry.speaker || '', org: entry.org || '' }];
+      }
       return {
         start: entry && entry.startMin !== null && entry.startMin !== undefined ? clockMin(entry.startMin) : '',
         end: entry && entry.endMin !== null && entry.endMin !== undefined ? clockMin(entry.endMin) : '',
-        speaker: (entry && entry.speaker) || '',
-        org: (entry && entry.org) || '',
-        topic: (entry && entry.topic) || ''
+        topic: (entry && entry.topic) || '',
+        participants: people
       };
     });
   }
 
   function entriesFromRows(rows) {
     return (Array.isArray(rows) ? rows : []).map(function (row) {
+      var people = (Array.isArray(row.participants) ? row.participants : [])
+        .map(function (person) {
+          return { name: String((person && person.name) || '').trim(), org: String((person && person.org) || '').trim() };
+        })
+        .filter(function (person) { return person.name || person.org; });
       return {
         start: String(row.start || '').trim(),
         end: String(row.end || '').trim(),
-        speaker: String(row.speaker || '').trim(),
-        org: String(row.org || '').trim(),
-        topic: String(row.topic || '').trim()
+        topic: String(row.topic || '').trim(),
+        participants: people
       };
     }).filter(function (row) {
-      return row.start || row.speaker || row.topic;
+      return row.start || row.topic || row.participants.length > 0;
     });
   }
 
@@ -1740,6 +1762,58 @@
             setRowsDirty(true);
           }
 
+          function updateParticipant(index, personIndex, field, value) {
+            setAgendaRows(function (current) {
+              var next = current.slice();
+              var row = Object.assign({}, next[index]);
+              var people = (Array.isArray(row.participants) ? row.participants : []).slice();
+              people[personIndex] = Object.assign({}, people[personIndex]);
+              people[personIndex][field] = value;
+              row.participants = people;
+              next[index] = row;
+              return next;
+            });
+            setRowsDirty(true);
+          }
+
+          function addParticipant(index) {
+            setAgendaRows(function (current) {
+              var next = current.slice();
+              var row = Object.assign({}, next[index]);
+              row.participants = (Array.isArray(row.participants) ? row.participants : [])
+                .concat([{ name: '', org: '' }]);
+              next[index] = row;
+              return next;
+            });
+            setRowsDirty(true);
+          }
+
+          function removeParticipant(index, personIndex) {
+            setAgendaRows(function (current) {
+              var next = current.slice();
+              var row = Object.assign({}, next[index]);
+              row.participants = (Array.isArray(row.participants) ? row.participants : [])
+                .filter(function (_, i) { return i !== personIndex; });
+              next[index] = row;
+              return next;
+            });
+            setRowsDirty(true);
+          }
+
+          function addSession() {
+            setAgendaRows(function (current) {
+              return current.concat([{ start: '', end: '', topic: '', participants: [] }]);
+            });
+            setRowsDirty(true);
+          }
+
+          function removeSession(index) {
+            setAgendaRows(function (current) {
+              return current.filter(function (_, i) { return i !== index; });
+            });
+            setRowsDirty(true);
+          }
+
           function saveAgendaRows() {
             var entries = entriesFromRows(agendaRows);
             if (entries.length === 0) {
@@ -1764,56 +1838,56 @@
           }
 
           function renderAgendaTable() {
-            return h('div', { className: 'dshm-table' },
-              h('div', { className: 'dshm-tableRow dshm-tableHead' },
-                h('span', null, '开始'),
-                h('span', null, '结束'),
-                h('span', null, '讲者'),
-                h('span', null, '单位'),
-                h('span', null, '')),
+            return h('div', { className: 'dshm-sessions' },
               agendaRows.map(function (row, index) {
-                return h('div', { key: 'agendaRow' + index, className: 'dshm-tableRow' },
-                  h('input', {
-                    className: 'dshm-input dshm-timeInput', value: row.start, placeholder: '14:00',
-                    onChange: function (event) { updateRow(index, 'start', event.target.value); }
-                  }),
-                  h('input', {
-                    className: 'dshm-input dshm-timeInput', value: row.end, placeholder: '14:30',
-                    onChange: function (event) { updateRow(index, 'end', event.target.value); }
-                  }),
-                  h('input', {
-                    className: 'dshm-input', value: row.speaker, placeholder: '姓名',
-                    onChange: function (event) { updateRow(index, 'speaker', event.target.value); }
-                  }),
-                  h('input', {
-                    className: 'dshm-input', value: row.org, placeholder: '单位',
-                    onChange: function (event) { updateRow(index, 'org', event.target.value); }
-                  }),
-                  h('button', {
-                    type: 'button', className: 'dshm-iconBtn', title: '删除这一行',
-                    onClick: function () {
-                      setAgendaRows(function (current) {
-                        return current.filter(function (_, i) { return i !== index; });
-                      });
-                      setRowsDirty(true);
-                    }
-                  }, '✕'),
-                  h('input', {
-                    className: 'dshm-input', value: row.topic, placeholder: '主题 / 环节',
-                    style: { gridColumn: '1 / span 5' },
-                    onChange: function (event) { updateRow(index, 'topic', event.target.value); }
-                  }));
+                var people = Array.isArray(row.participants) ? row.participants : [];
+                return h('div', { key: 'agendaRow' + index, className: 'dshm-session' },
+                  h('div', { className: 'dshm-sessionHead' },
+                    h('input', {
+                      type: 'time', className: 'dshm-input dshm-timeInput', value: row.start,
+                      title: '开始时间',
+                      onChange: function (event) { updateRow(index, 'start', event.target.value); }
+                    }),
+                    h('span', { className: 'dshm-sessionDash' }, '—'),
+                    h('input', {
+                      type: 'time', className: 'dshm-input dshm-timeInput', value: row.end,
+                      title: '结束时间',
+                      onChange: function (event) { updateRow(index, 'end', event.target.value); }
+                    }),
+                    h('input', {
+                      className: 'dshm-input dshm-sessionTopic', value: row.topic, placeholder: '主题 / 环节',
+                      onChange: function (event) { updateRow(index, 'topic', event.target.value); }
+                    }),
+                    h('button', {
+                      type: 'button', className: 'dshm-iconBtn', title: '删除这个时段',
+                      onClick: function () { removeSession(index); }
+                    }, '✕')),
+                  h('div', { className: 'dshm-people' },
+                    people.map(function (person, personIndex) {
+                      return h('div', { key: 'person' + index + '-' + personIndex, className: 'dshm-person' },
+                        h('input', {
+                          className: 'dshm-input', value: person.name, placeholder: '姓名',
+                          onChange: function (event) { updateParticipant(index, personIndex, 'name', event.target.value); }
+                        }),
+                        h('input', {
+                          className: 'dshm-input', value: person.org, placeholder: '单位',
+                          onChange: function (event) { updateParticipant(index, personIndex, 'org', event.target.value); }
+                        }),
+                        h('button', {
+                          type: 'button', className: 'dshm-iconBtn', title: '移除参与人',
+                          onClick: function () { removeParticipant(index, personIndex); }
+                        }, '✕'));
+                    }),
+                    h('button', {
+                      type: 'button', className: 'dshm-btn', 'data-kind': 'ghost', 'data-size': 'small',
+                      onClick: function () { addParticipant(index); }
+                    }, '＋ 参与人')));
               }),
-              h('div', { className: 'dshm-row', style: { marginTop: '6px' } },
+              h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
                 h('button', {
                   type: 'button', className: 'dshm-btn', 'data-kind': 'ghost',
-                  onClick: function () {
-                    setAgendaRows(function (current) {
-                      return current.concat([{ start: '', end: '', speaker: '', org: '', topic: '' }]);
-                    });
-                    setRowsDirty(true);
-                  }
-                }, '＋ 添加一行'),
+                  onClick: addSession
+                }, '＋ 添加时段'),
                 h('button', {
                   type: 'button', className: 'dshm-btn', 'data-kind': 'primary',
                   disabled: agendaBusy, onClick: saveAgendaRows
