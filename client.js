@@ -43,6 +43,7 @@
   var MAX_RENDER_LINES = 320;
 
   var ROLES = [
+    { id: '', label: '未设置' },
     { id: 'host', label: '主持人' },
     { id: 'speaker', label: '讲者' },
     { id: 'panelist', label: '讨论嘉宾' },
@@ -194,6 +195,10 @@
       '.dshm-menuItem:hover{background:rgba(127,176,255,.16)}',
       '.dshm-menuItem[data-current="true"]{background:rgba(127,176,255,.24);font-weight:650}',
       '.dshm-menuInline{position:static;margin:6px 0 0;max-height:260px}',
+      '.dshm-panel{position:relative}',
+      '.dshm-dropOverlay{position:absolute;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;',
+      'font-size:12px;color:var(--dsw-alias-state-business-primary,#7fb0ff);background:color-mix(in srgb,var(--dsw-alias-bg-base,#141414) 82%,transparent);',
+      'border:2px dashed var(--dsw-alias-state-business-primary,#3f7cff);border-radius:12px;pointer-events:none}',
       '.dshm-menuLabel{font-size:9.5px;color:var(--dsw-alias-label-caption,#777);padding:4px 8px 2px}',
       '.dshm-menuCustom{display:grid;grid-template-columns:1fr 1fr auto;gap:4px;padding:6px 8px 2px;border-top:1px solid rgba(255,255,255,.1);margin-top:4px}',
       '.dshm-table{display:flex;flex-direction:column;gap:5px;margin-top:7px}',
@@ -410,27 +415,8 @@
     });
   }
 
-  function setupKey() {
-    return 'dsh-meeting:setup:' + new Date().toISOString().slice(0, 10);
-  }
-
-  function readSetupDone() {
-    try {
-      return localStorage.getItem(setupKey()) === '1';
-    } catch {
-      return false;
-    }
-  }
-
-  function markSetupDone() {
-    try {
-      localStorage.setItem(setupKey(), '1');
-    } catch {
-      /* private mode */
-    }
-  }
-
-  function currentAgendaClient(entries) {    var list = Array.isArray(entries) ? entries.filter(function (entry) { return entry && entry.startMin !== null && entry.startMin !== undefined; }) : [];
+  function currentAgendaClient(entries) {
+    var list = Array.isArray(entries) ? entries.filter(function (entry) { return entry && entry.startMin !== null && entry.startMin !== undefined; }) : [];
     if (list.length === 0) return { status: 'empty', entry: null, clock: '' };
     var now = new Date();
     var minutes = now.getHours() * 60 + now.getMinutes();
@@ -545,6 +531,7 @@
     var source = settings && typeof settings === 'object' ? settings : {};
     return {
       title: typeof source.title === 'string' ? source.title : '',
+      role: typeof source.role === 'string' ? source.role : '',
       domain: typeof source.domain === 'string' ? source.domain : 'general',
       customDomain: typeof source.customDomain === 'string' ? source.customDomain : '',
       topic: typeof source.topic === 'string' ? source.topic : '',
@@ -566,6 +553,7 @@
     if (!active) return defaultForm({});
     return {
       title: active.title || '',
+      role: active.role || '',
       domain: active.domain || 'general',
       customDomain: active.customDomain || '',
       topic: active.topic || '',
@@ -1093,7 +1081,7 @@
           var [devices, setDevices] = React.useState([]);
           var [micDevices, setMicDevices] = React.useState([]);
           var [showSettings, setShowSettings] = React.useState(false);
-          var [profile, setProfile] = React.useState({ userName: '', userOrg: '', role: 'speaker' });
+          var [profile, setProfile] = React.useState({ userName: '', userOrg: '' });
           var [scriptPrompt, setScriptPrompt] = React.useState('');
           var [following, setFollowing] = React.useState(true);
           var [dragOver, setDragOver] = React.useState(false);
@@ -1106,7 +1094,8 @@
           var [speakerMenuTurn, setSpeakerMenuTurn] = React.useState('');
           var [agendaRows, setAgendaRows] = React.useState([]);
           var [rowsDirty, setRowsDirty] = React.useState(false);
-          var [setupDone, setSetupDone] = React.useState(readSetupDone);
+          var [forceWizard, setForceWizard] = React.useState(false);
+          var [wizardDismissed, setWizardDismissed] = React.useState(false);
           var bodyRef = React.useRef(null);
           var atBottomRef = React.useRef(true);
           var initializedRef = React.useRef(false);
@@ -1377,7 +1366,7 @@
           React.useEffect(function () {
             if (!snapshot) return;
             var source = snapshot.profile && typeof snapshot.profile === 'object' ? snapshot.profile : {};
-            var next = { userName: source.userName || '', userOrg: source.userOrg || '', role: source.role || 'speaker' };
+            var next = { userName: source.userName || '', userOrg: source.userOrg || '' };
             var key = next.userName + '\u0000' + next.userOrg + '\u0000' + next.role;
             if (profileAppliedRef.current === key) return;
             profileAppliedRef.current = key;
@@ -1551,6 +1540,9 @@
               if (payload.state) setSnapshot(payload.state);
               setRowsDirty(false);
               setSpeakerMenuTurn('');
+              // A new meeting always starts with the setup flow.
+              setWizardDismissed(false);
+              setForceWizard(true);
               switchTab('transcript');
               notify('已回到会议准备状态');
             }).catch(function (error) {
@@ -1562,7 +1554,6 @@
             api(API.profile, {
               userName: profile.userName,
               userOrg: profile.userOrg,
-              role: profile.role,
               domain: form.domain,
               customDomain: form.customDomain
             }).then(function (payload) {
@@ -1676,6 +1667,29 @@
             reader.readAsText(file, 'utf-8');
           }
 
+          // The model fills the meeting context (topic / domain / role) from the
+          // agenda; mirror it into the editable form without clobbering what the
+          // user already typed.
+          React.useEffect(function () {
+            if (!snapshot || !snapshot.settings) return;
+            var settings = snapshot.settings;
+            setForm(function (current) {
+              var next = Object.assign({}, current);
+              var changed = false;
+              if (!String(current.topic || '').trim() && typeof settings.topic === 'string' && settings.topic.trim()) {
+                next.topic = settings.topic;
+                changed = true;
+              }
+              if (!current.role && typeof settings.role === 'string' && settings.role) {
+                next.role = settings.role;
+                changed = true;
+              }
+              return changed ? next : current;
+            });
+          }, [snapshot && snapshot.settings
+            ? String(snapshot.settings.role || '') + '|' + String(snapshot.settings.topic || '')
+            : '']);
+
           // Keep the editable agenda table in sync with the Host, unless the
           // user is in the middle of editing it.
           React.useEffect(function () {
@@ -1708,7 +1722,7 @@
               topic: form.topic,
               domain: form.domain,
               customDomain: form.customDomain,
-              role: profile.role,
+              role: form.role,
               text: agendaDraft
             }).then(function (payload) {
               if (payload.state) setSnapshot(payload.state);
@@ -1786,9 +1800,43 @@
 
           function onAgendaDrop(event) {
             event.preventDefault();
+            event.stopPropagation();
             setDragOver(false);
             var file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
             applyAgendaFile(file);
+          }
+
+          // The DSH chat window also listens for file drops, so the whole panel
+          // claims the drag: without stopPropagation a file dragged onto the
+          // meeting panel ends up attached to the conversation instead.
+          function onPanelDragOver(event) {
+            if (!event.dataTransfer) return;
+            event.preventDefault();
+            event.stopPropagation();
+            event.dataTransfer.dropEffect = 'copy';
+            setDragOver(true);
+          }
+
+          function onPanelDragEnter(event) {
+            if (!event.dataTransfer) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setDragOver(true);
+          }
+
+          function onPanelDragLeave(event) {
+            event.stopPropagation();
+            var next = event.relatedTarget;
+            if (next && event.currentTarget && event.currentTarget.contains(next)) return;
+            setDragOver(false);
+          }
+
+          function onPanelDrop(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            setDragOver(false);
+            var file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+            if (file) applyAgendaFile(file);
           }
 
           function onAgendaPaste(event) {
@@ -1907,7 +1955,19 @@
             );
           }
 
-          return h('div', { className: 'dshm-panel', role: 'dialog', 'aria-label': '会议助手' },
+          return h('div', {
+            className: 'dshm-panel',
+            role: 'dialog',
+            'aria-label': '会议助手',
+            'data-drag': dragOver ? 'true' : 'false',
+            onDragOver: onPanelDragOver,
+            onDragEnter: onPanelDragEnter,
+            onDragLeave: onPanelDragLeave,
+            onDrop: onPanelDrop
+          },
+            dragOver
+              ? h('div', { className: 'dshm-dropOverlay' }, '松开以载入日程文件（或点「上传 / 拖入日程」）')
+              : null,
             h('div', { className: 'dshm-head' },
               h('div', { className: 'dshm-titleRow' },
                 h('span', { className: 'dshm-dot', 'data-tone': status.tone }),
@@ -2040,11 +2100,9 @@
                   field('我的单位', h('input', {
                     className: 'dshm-input', value: profile.userOrg, placeholder: '例如：市医院',
                     onChange: function (event) { setProfile(Object.assign({}, profile, { userOrg: event.target.value })); }
-                  })),
-                  field('我的角色（AI 按日程判断，可改）', h('select', {
-                    className: 'dshm-select', value: profile.role,
-                    onChange: function (event) { setProfile(Object.assign({}, profile, { role: event.target.value })); }
-                  }, ROLES.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); })))),
+                  }))),
+                h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
+                  h('button', { type: 'button', className: 'dshm-btn', 'data-kind': 'primary', onClick: saveProfile }, '保存我的信息'))),
                 h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
                   h('button', { type: 'button', className: 'dshm-btn', 'data-kind': 'primary', onClick: saveProfile }, '保存我的信息'))),
               h('div', {
@@ -2092,7 +2150,11 @@
                   field('会议领域', h('select', {
                     className: 'dshm-select', value: form.domain,
                     onChange: function (event) { update('domain', event.target.value); }
-                  }, DOMAINS.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); })))),
+                  }, DOMAINS.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); }))),
+                  field('我在会议中的角色（AI 按日程判断，可改）', h('select', {
+                    className: 'dshm-select', value: form.role,
+                    onChange: function (event) { update('role', event.target.value); }
+                  }, ROLES.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); }))),
                 renderAgendaTable(),
                 h('label', { className: 'dshm-check', style: { marginTop: '8px' } },
                   h('input', {
@@ -2103,8 +2165,28 @@
                 h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
                   h('button', {
                     type: 'button', className: 'dshm-btn', 'data-kind': 'primary',
-                    onClick: function () { markSetupDone(); setSetupDone(true); notify('初始化完成，可以开始听会了'); }
-                  }, '完成初始化'))),
+                    onClick: function () {
+                      // The role and the meeting context live on the Host's
+                      // settings for this session; persist them before leaving.
+                      api(API.settings, form).then(function (payload) {
+                        if (payload.state) setSnapshot(payload.state);
+                        setForceWizard(false);
+                        setWizardDismissed(true);
+                        notify('初始化完成，可以开始听会了');
+                      }).catch(function (error) {
+                        setForceWizard(false);
+                        setWizardDismissed(true);
+                        notify('保存会议上下文失败：' + error.message);
+                      });
+                    }
+                  }, '完成初始化'),
+                  h('button', {
+                    type: 'button', className: 'dshm-btn', 'data-kind': 'ghost',
+                    onClick: function () {
+                      setForceWizard(false);
+                      setWizardDismissed(true);
+                    }
+                  }, '跳过'))),
               cues.length > 0
                 ? h('div', { className: 'dshm-card' },
                   h('div', { className: 'dshm-cardTitle' }, '为你生成的串词'),
@@ -2139,11 +2221,7 @@
                   field('我的单位（可选）', h('input', {
                     className: 'dshm-input', value: profile.userOrg, placeholder: '例如：市医院',
                     onChange: function (event) { setProfile(Object.assign({}, profile, { userOrg: event.target.value })); }
-                  })),
-                  field('我在会议中的角色', h('select', {
-                    className: 'dshm-select', value: profile.role,
-                    onChange: function (event) { setProfile(Object.assign({}, profile, { role: event.target.value })); }
-                  }, ROLES.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); })))
+                  }))
                 ),
                 h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
                   h('button', { type: 'button', className: 'dshm-btn', 'data-kind': 'primary', onClick: saveProfile }, '保存我的信息'),
@@ -2170,6 +2248,10 @@
                     className: 'dshm-select', value: form.domain,
                     onChange: function (event) { update('domain', event.target.value); }
                   }, DOMAINS.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); }))),
+                  field('我在会议中的角色', h('select', {
+                    className: 'dshm-select', value: form.role,
+                    onChange: function (event) { update('role', event.target.value); }
+                  }, ROLES.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); }))),
                   form.domain === 'custom'
                     ? field('自定义领域', h('input', {
                       className: 'dshm-input', value: form.customDomain, placeholder: '例如：半导体设备',
@@ -2305,7 +2387,7 @@
                 h('div', { className: 'dshm-row', style: { marginTop: '6px' } },
                   h('button', {
                     type: 'button', className: 'dshm-btn', 'data-kind': 'ghost',
-                    onClick: function () { setSetupDone(false); setShowSettings(false); }
+                    onClick: function () { setForceWizard(true); setWizardDismissed(false); setShowSettings(false); }
                   }, '重新初始化会议'))
               ),
               asr && asr.available === false
@@ -2379,8 +2461,19 @@
 
           function renderTranscript() {
             if (!active) {
-              // First open of the day with no meeting yet: guide the setup.
-              if (!setupDone && snapshot && snapshot.hasTodayMeeting === false && !showSettings) {
+              // The setup flow is no longer tied to "a meeting happened today":
+              // it opens for a new meeting, and whenever the meeting topic,
+              // agenda or my role is still empty/default.
+              var wizardAgenda = snapshot && snapshot.agenda && Array.isArray(snapshot.agenda.entries)
+                ? snapshot.agenda.entries
+                : [];
+              var needsSetup = forceWizard
+                || (!wizardDismissed && (
+                  wizardAgenda.length === 0
+                  || String(form.topic || '').trim().length === 0
+                  || !form.role
+                ));
+              if (needsSetup && !showSettings) {
                 return renderWizard();
               }
               return h('div', { className: 'dshm-empty' },
