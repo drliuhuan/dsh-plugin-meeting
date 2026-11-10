@@ -8,7 +8,9 @@ import { extractOfficeText } from '../lib/office.mjs';
 import { SpeakerClusterer } from '../lib/speaker.mjs';
 import {
   DEFAULT_SCRIPT_PROMPT,
+  buildCueSystemPrompt,
   buildScriptSystemPrompt,
+  dueCues,
   formatScriptAgenda,
   markAgendaEntries,
   nameMatches,
@@ -38,7 +40,7 @@ const parsedCsv = parseAgenda(csv, 'agenda.csv');
 assert.equal(parsedCsv.entries.length, 1);
 assert.equal(parsedCsv.entries[0].topic, '病例分享');
 
-// --- user-only speech drafts (讲词/串词) -----------------------------------
+// --- user-only speech drafts (讲词) ---------------------------------------
 assert.equal(normalizePersonName(' 张 医 生 '), '张医生');
 assert.equal(nameMatches('张医生（市医院）', '张医生'), true);
 assert.equal(nameMatches('Zhang Wei', 'zhang wei'), true);
@@ -57,7 +59,7 @@ const scriptPrompt = buildScriptSystemPrompt({
 });
 assert.match(scriptPrompt, /我的姓名：张医生（市医院）/);
 assert.match(scriptPrompt, /［我的环节］/);
-assert.match(scriptPrompt, /只输出我的内容/);
+assert.match(scriptPrompt, /只输出我的讲词/);
 assert.match(scriptPrompt, /14:00-14:30 张医生（市医院）：创面修复病例分享/);
 assert.ok(scriptPrompt.includes(DEFAULT_SCRIPT_PROMPT));
 const customPrompt = buildScriptSystemPrompt({
@@ -71,6 +73,40 @@ const liAgenda = formatScriptAgenda(parsed.entries, '李主任').split('\n');
 assert.ok(!liAgenda[0].includes('［我的环节］'));
 assert.ok(liAgenda[1].includes('［我的环节］'));
 assert.ok(!liAgenda[2].includes('［我的环节］'));
+
+// --- 串词 cue scheduling (role-aware, just in time) -------------------------
+const cueAgenda = [
+  { startMin: 840, endMin: 870, speaker: '张医生', org: '市医院', topic: '病例分享' },
+  { startMin: 900, endMin: 920, speaker: '李主任', org: '省医院', topic: '手术演示' },
+  { startMin: 960, endMin: 990, speaker: '我', org: '本院', topic: '总结' }
+];
+const hostOpening = dueCues({ entries: cueAgenda, role: 'host', userName: '我', minutes: 838 });
+assert.deepEqual(hostOpening.map((item) => item.kind), ['opening']);
+const hostTransition = dueCues({ entries: cueAgenda, role: 'host', userName: '我', minutes: 899 });
+assert.deepEqual(hostTransition.map((item) => item.kind), ['transition']);
+assert.equal(hostTransition[0].index, 1);
+const hostClosing = dueCues({ entries: cueAgenda, role: 'host', userName: '我', minutes: 989 });
+assert.deepEqual(hostClosing.map((item) => item.kind), ['closing']);
+const speakerDue = dueCues({ entries: cueAgenda, role: 'speaker', userName: '我', minutes: 958 });
+assert.deepEqual(speakerDue.map((item) => item.kind), ['thanks']);
+assert.equal(dueCues({ entries: cueAgenda, role: 'speaker', userName: '我', minutes: 898 }).length, 0);
+const hostCuePrompt = buildCueSystemPrompt({
+  kind: 'transition',
+  role: 'host',
+  entry: cueAgenda[1],
+  prevEntry: cueAgenda[0],
+  nextEntry: cueAgenda[2],
+  entries: cueAgenda,
+  userName: '我',
+  domainLabel: '医学',
+  transcript: '张医生：我们做了 32 例……',
+  nowClock: '14:58'
+});
+assert.match(hostCuePrompt, /总结刚刚结束环节/);
+assert.match(hostCuePrompt, /张医生：我们做了 32 例/);
+const thanksCuePrompt = buildCueSystemPrompt({ kind: 'thanks', role: 'speaker', entry: cueAgenda[2], entries: cueAgenda, userName: '我' });
+assert.match(thanksCuePrompt, /感谢主持人的介绍/);
+assert.doesNotMatch(thanksCuePrompt, /总结刚刚结束环节/);
 
 // --- OCR spacing and OOXML text extraction --------------------------------
 const ocrText = normalizeOcrText('会 议 日 程 14 ： 00 · 14 ： 30 张 医 生 （ 市 医 院 ） 病 例 14 ： 30 · 15 ： 00 讨 论');

@@ -33,11 +33,19 @@
     agendaImage: '/dsh-meeting/agenda-image',
     agendaFile: '/dsh-meeting/agenda-file',
     agendaCurrent: '/dsh-meeting/agenda-current',
-    turnSpeaker: '/dsh-meeting/turn-speaker'
+    turnSpeaker: '/dsh-meeting/turn-speaker',
+    cue: '/dsh-meeting/cue'
   };
   var STYLE_ID = 'dsh-meeting-style';
   var STORAGE_KEY = 'dsh-meeting:form:v2';
   var MAX_RENDER_LINES = 320;
+
+  var ROLES = [
+    { id: 'host', label: '主持人' },
+    { id: 'speaker', label: '讲者' },
+    { id: 'panelist', label: '讨论嘉宾' },
+    { id: 'attendee', label: '参会者' }
+  ];
 
   var DOMAINS = [
     { id: 'general', label: '通用会议' },
@@ -184,6 +192,9 @@
       '.dshm-menuItem:hover{background:rgba(127,176,255,.16)}',
       '.dshm-menuItem[data-current="true"]{background:rgba(127,176,255,.24);font-weight:650}',
       '.dshm-menuInline{position:static;margin:6px 0 0;max-height:200px}',
+      '.dshm-cue{padding:7px 0;border-top:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.08))}',
+      '.dshm-cue:first-of-type{border-top:0}',
+      '.dshm-cueText{margin:4px 0 0;font-size:12px;line-height:1.65;white-space:pre-wrap}',
       '.dshm-tab{appearance:none;border:none;border-radius:var(--dsw-radius-sm,6px);background:0 0;color:var(--dsw-alias-label-secondary,#b9b9b9);',
       'font:inherit;font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}',
       '.dshm-tab[data-on="true"]{background:var(--dsw-alias-interactive-bg-hover,rgba(255,255,255,.1));color:var(--dsw-alias-label-primary,#f2f2f2)}',
@@ -1001,7 +1012,7 @@
           var [devices, setDevices] = React.useState([]);
           var [micDevices, setMicDevices] = React.useState([]);
           var [showSettings, setShowSettings] = React.useState(false);
-          var [profile, setProfile] = React.useState({ userName: '', userOrg: '' });
+          var [profile, setProfile] = React.useState({ userName: '', userOrg: '', role: 'speaker' });
           var [scriptPrompt, setScriptPrompt] = React.useState('');
           var [following, setFollowing] = React.useState(true);
           var [dragOver, setDragOver] = React.useState(false);
@@ -1107,6 +1118,22 @@
               }
               if (type === 'capture') {
                 meeting.capture = payload;
+                next.active = meeting;
+                return next;
+              }
+              if (type === 'cue') {
+                var cueList = Array.isArray(meeting.cues) ? meeting.cues.slice() : [];
+                var cueFound = false;
+                for (var cq = 0; cq < cueList.length; cq += 1) {
+                  if (cueList[cq].key === payload.key) {
+                    cueList[cq] = payload;
+                    cueFound = true;
+                    break;
+                  }
+                }
+                if (!cueFound) cueList.push(payload);
+                meeting.cues = cueList;
+                meeting.cueState = { status: payload.status, key: payload.key };
                 next.active = meeting;
                 return next;
               }
@@ -1266,8 +1293,8 @@
           React.useEffect(function () {
             if (!snapshot) return;
             var source = snapshot.profile && typeof snapshot.profile === 'object' ? snapshot.profile : {};
-            var next = { userName: source.userName || '', userOrg: source.userOrg || '' };
-            var key = next.userName + '\u0000' + next.userOrg;
+            var next = { userName: source.userName || '', userOrg: source.userOrg || '', role: source.role || 'speaker' };
+            var key = next.userName + '\u0000' + next.userOrg + '\u0000' + next.role;
             if (profileAppliedRef.current === key) return;
             profileAppliedRef.current = key;
             setProfile(next);
@@ -1427,6 +1454,7 @@
             api(API.profile, {
               userName: profile.userName,
               userOrg: profile.userOrg,
+              role: profile.role,
               domain: form.domain,
               customDomain: form.customDomain
             }).then(function (payload) {
@@ -1441,6 +1469,15 @@
               }
             }).catch(function (error) {
               notify('保存我的信息失败：' + error.message);
+            });
+          }
+
+          function requestCue(index) {
+            api(API.cue, { index: index }).then(function (payload) {
+              if (payload.state) setSnapshot(payload.state);
+              notify('正在按当前进度生成串词…');
+            }).catch(function (error) {
+              notify('生成串词失败：' + error.message);
             });
           }
 
@@ -1775,7 +1812,11 @@
                   field('我的单位（可选）', h('input', {
                     className: 'dshm-input', value: profile.userOrg, placeholder: '例如：市医院',
                     onChange: function (event) { setProfile(Object.assign({}, profile, { userOrg: event.target.value })); }
-                  }))
+                  })),
+                  field('我在会议中的角色', h('select', {
+                    className: 'dshm-select', value: profile.role,
+                    onChange: function (event) { setProfile(Object.assign({}, profile, { role: event.target.value })); }
+                  }, ROLES.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); })))
                 ),
                 h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
                   h('button', { type: 'button', className: 'dshm-btn', 'data-kind': 'primary', onClick: saveProfile }, '保存我的信息'),
@@ -2133,6 +2174,48 @@
                 : '';
 
             return h('div', { className: 'dshm-section' },
+              (function () {
+                var cues = active && Array.isArray(active.cues) ? active.cues : [];
+                var cueKindLabel = {
+                  opening: '开场致辞', transition: '环节交接', closing: '结束致辞', thanks: '上场感谢', manual: '即时串词'
+                };
+                var ownWithIndex = agendaEntries
+                  .map(function (entry, index) { return { entry: entry, index: index }; })
+                  .filter(function (item) { return item.entry && nameMatches(item.entry.speaker, userName); });
+                return h('div', { className: 'dshm-card' },
+                  h('div', { className: 'dshm-cardTitle' }, '我的串词',
+                    h('span', { className: 'dshm-muted' }, '到我的环节前 2 分钟自动生成，结合日程和已经听到的内容')),
+                  cues.length > 0
+                    ? cues.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).map(function (cue) {
+                      return h('div', { key: cue.key, className: 'dshm-cue' },
+                        h('div', { className: 'dshm-row' },
+                          h('span', {
+                            className: 'dshm-pill',
+                            'data-tone': cue.status === 'error' ? 'bad' : cue.status === 'writing' ? 'busy' : 'good'
+                          }, cueKindLabel[cue.kind] || '串词'),
+                          h('span', { className: 'dshm-muted' }, cue.entryText || ''),
+                          h('span', { className: 'dshm-spacer', style: { flex: 1 } }),
+                          h('span', { className: 'dshm-muted' }, cue.at ? formatDate(cue.at) : '')),
+                        cue.status === 'writing'
+                          ? h('p', { className: 'dshm-muted' }, h('span', { className: 'dshm-spinner' }), ' 正在结合当前进度生成…')
+                          : cue.status === 'error'
+                            ? h('div', { className: 'dshm-warning' }, cue.error || '生成失败')
+                            : h('p', { className: 'dshm-cueText' }, cue.markdown));
+                    })
+                    : h('p', { className: 'dshm-muted' }, active
+                      ? '还没有串词。到达你的环节前 2 分钟会自动生成；也可以在下面点一个环节立即生成。'
+                      : '开始听会后，到达你的环节前 2 分钟会自动生成串词。'),
+                  ownWithIndex.length > 0 && active && !active.readOnly
+                    ? h('div', { className: 'dshm-chips', style: { marginTop: '6px' } },
+                      ownWithIndex.map(function (item) {
+                        return h('button', {
+                          key: 'own' + item.index, type: 'button', className: 'dshm-chip',
+                          onClick: function () { requestCue(item.index); }
+                        }, '立即生成：' + (agendaEntryText(item.entry) || '我的环节'));
+                      }))
+                    : null
+                );
+              })(),
               h('div', { className: 'dshm-card' },
                 h('div', { className: 'dshm-cardTitle' }, '我的讲词与串词',
                   h('span', { className: 'dshm-spacer', style: { flex: 1 } }),

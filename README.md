@@ -28,15 +28,22 @@ already configured in DSH.
   turn. Time ranges, speaker names and organizations become the current-item
   indicator, speaker-name suggestions, and reference context for correction,
   minutes and Q&A.
-- A durable **my name + meeting domain** profile (set in the panel settings,
-  stored at `~/.dsh/meetings/profile.json`): it never depends on the current
-  meeting or the app session.
+- A durable **my name + role + meeting domain** profile (set in the panel
+  settings, stored at `~/.dsh/meetings/profile.json`): it never depends on the
+  current meeting or the app session.
 - **My speech drafts**: after an agenda upload, only when the user's own name
-  appears in the agenda, the model writes the user's own speeches and the
-  transitions they have to say — no generic host script, nothing for other
-  speakers. The writing instructions are editable and the draft can be
-  regenerated at any time; the Markdown result survives page reloads and is
-  stored with the meeting.
+  appears in the agenda, the model writes the content of the user's own sessions
+  — no generic host script, nothing for other speakers. The writing instructions
+  are editable and the draft can be regenerated at any time; the Markdown result
+  survives page reloads and is stored with the meeting.
+- **Cue cards (串词), just in time**: transitions are not written up front. While
+  the meeting is being listened to, two minutes before one of the user's moments
+  the plugin writes that one card from the agenda *and* what has been recognized
+  so far. The role decides its shape: a host gets an opening, a per-session
+  transition that summarises the session that just ended and introduces the next
+  one, and a closing; a speaker or panelist only gets "thanks for the
+  introduction". A card can also be requested from the panel for any of the
+  user's agenda items.
 - Local CAM++ voice clustering into 发言人 1/2/3 (about 27 MB): consecutive
   turns by one speaker are merged into one continuous block; a one-minute pass
   re-corrects the whole conversation to join lines split by the 10-second ASR
