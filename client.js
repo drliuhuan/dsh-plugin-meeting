@@ -35,7 +35,8 @@
     agendaCurrent: '/dsh-meeting/agenda-current',
     turnSpeaker: '/dsh-meeting/turn-speaker',
     cue: '/dsh-meeting/cue',
-    agendaEntries: '/dsh-meeting/agenda-entries'
+    agendaEntries: '/dsh-meeting/agenda-entries',
+    newMeeting: '/dsh-meeting/new'
   };
   var STYLE_ID = 'dsh-meeting-style';
   var STORAGE_KEY = 'dsh-meeting:form:v2';
@@ -192,7 +193,9 @@
       'padding:6px 8px;border-radius:7px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.dshm-menuItem:hover{background:rgba(127,176,255,.16)}',
       '.dshm-menuItem[data-current="true"]{background:rgba(127,176,255,.24);font-weight:650}',
-      '.dshm-menuInline{position:static;margin:6px 0 0;max-height:200px}',
+      '.dshm-menuInline{position:static;margin:6px 0 0;max-height:260px}',
+      '.dshm-menuLabel{font-size:9.5px;color:var(--dsw-alias-label-caption,#777);padding:4px 8px 2px}',
+      '.dshm-menuCustom{display:grid;grid-template-columns:1fr 1fr auto;gap:4px;padding:6px 8px 2px;border-top:1px solid rgba(255,255,255,.1);margin-top:4px}',
       '.dshm-table{display:flex;flex-direction:column;gap:5px;margin-top:7px}',
       '.dshm-tableRow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) 26px;gap:4px;align-items:center}',
       '.dshm-tableHead{font-size:10px;color:var(--dsw-alias-label-caption,#777);gap:4px}',
@@ -837,16 +840,20 @@
           var segments = Array.isArray(turn.segments) ? turn.segments : [];
           var duration = Math.max(0, (Number(turn.endMs) || 0) - (Number(turn.startMs) || 0));
           var speakers = Array.isArray(props.speakers) ? props.speakers : [];
+          var roster = Array.isArray(props.roster) ? props.roster : [];
+          var [customName, setCustomName] = React.useState('');
+          var [customOrg, setCustomOrg] = React.useState('');
+          var canPick = Boolean(props.onPickSpeaker || props.onPickPerson);
           return h('div', { className: 'dshm-turn', style: { borderLeftColor: color } },
             h('div', { className: 'dshm-turnHead' },
               h('span', {
                 className: 'dshm-speaker',
-                style: { borderColor: color, color: color, cursor: props.onPickSpeaker ? 'pointer' : 'default' },
-                title: props.onPickSpeaker ? '点击指定讲者' : undefined,
-                onClick: props.onPickSpeaker
+                style: { borderColor: color, color: color, cursor: canPick ? 'pointer' : 'default' },
+                title: canPick ? '点击指定发言人或输入名字' : undefined,
+                onClick: canPick
                   ? function () { props.onToggleMenu(turn.id); }
                   : undefined
-              }, (speakerName || '未命名') + (props.onPickSpeaker ? ' ▾' : '')),
+              }, (speakerName || '未命名') + (canPick ? ' ▾' : '')),
               turn.speakerOrg ? h('span', { className: 'dshm-groupOrg' }, turn.speakerOrg) : null,
               turn.speakerSuggested ? h('span', { className: 'dshm-pill', 'data-tone': 'busy' }, '日程推测') : null,
               pending ? h('span', { className: 'dshm-pill', 'data-tone': 'busy' }, '校正中') : null,
@@ -856,15 +863,22 @@
             ),
             props.menu
               ? h('div', { className: 'dshm-menu dshm-menuInline' },
-                speakers.length === 0
-                  ? h('div', { className: 'dshm-muted', style: { padding: '4px 8px' } }, '还没有识别到其他发言人')
-                  : speakers.map(function (speaker) {
-                    return h('button', {
-                      key: speaker.id, type: 'button', className: 'dshm-menuItem',
-                      'data-current': turn.speakerId === speaker.id ? 'true' : 'false',
-                      onClick: function () { props.onPickSpeaker(turn.id, speaker.id); }
-                    }, (speaker.name || '未命名') + (speaker.org ? '（' + speaker.org + '）' : ''));
-                  }),
+                roster.length > 0 ? h('div', { className: 'dshm-menuLabel' }, '与会人员（来自日程）') : null,
+                roster.map(function (person) {
+                  return h('button', {
+                    key: 'r:' + person.name, type: 'button', className: 'dshm-menuItem',
+                    'data-current': turn.speakerName === person.name ? 'true' : 'false',
+                    onClick: function () { props.onPickPerson(turn.id, person.name, person.org); }
+                  }, person.name + (person.org ? '（' + person.org + '）' : ''));
+                }),
+                speakers.length > 0 ? h('div', { className: 'dshm-menuLabel' }, '已识别的发言人') : null,
+                speakers.map(function (speaker) {
+                  return h('button', {
+                    key: speaker.id, type: 'button', className: 'dshm-menuItem',
+                    'data-current': turn.speakerId === speaker.id ? 'true' : 'false',
+                    onClick: function () { props.onPickSpeaker(turn.id, speaker.id); }
+                  }, (speaker.name || '未命名') + (speaker.org ? '（' + speaker.org + '）' : ''));
+                }),
                 h('button', {
                   key: 'self', type: 'button', className: 'dshm-menuItem',
                   'data-current': turn.speakerId === 'self' ? 'true' : 'false',
@@ -873,7 +887,23 @@
                 h('button', {
                   key: 'none', type: 'button', className: 'dshm-menuItem',
                   onClick: function () { props.onPickSpeaker(turn.id, null); }
-                }, '未指定'))
+                }, '未指定'),
+                h('div', { className: 'dshm-menuCustom' },
+                  h('input', {
+                    className: 'dshm-input', value: customName, placeholder: '名字',
+                    onChange: function (event) { setCustomName(event.target.value); }
+                  }),
+                  h('input', {
+                    className: 'dshm-input', value: customOrg, placeholder: '单位（可选）',
+                    onChange: function (event) { setCustomOrg(event.target.value); }
+                  }),
+                  h('button', {
+                    type: 'button', className: 'dshm-btn', 'data-kind': 'small',
+                    disabled: !customName.trim(),
+                    onClick: function () {
+                      if (customName.trim()) props.onPickPerson(turn.id, customName.trim(), customOrg.trim());
+                    }
+                  }, '指定')))
               : null,
             h('div', { className: 'dshm-turnText', 'data-pending': pending ? 'true' : 'false' }, turn.text || (pending ? '识别中…' : '')),
             turn.translation ? h('div', { className: 'dshm-translation' }, turn.translation) : null,
@@ -1504,6 +1534,30 @@
             });
           }
 
+          // Pick a name from the agenda roster, or a name + organization typed
+          // in the same menu.
+          function pickTurnPerson(turnId, name, org) {
+            api(API.turnSpeaker, { turnId: turnId, name: name, org: org || '' }).then(function (payload) {
+              if (payload.state) setSnapshot(payload.state);
+              setSpeakerMenuTurn('');
+              notify('已指定发言人：' + name);
+            }).catch(function (error) {
+              notify('指定发言人失败：' + error.message);
+            });
+          }
+
+          function startNewMeeting() {
+            api(API.newMeeting, {}).then(function (payload) {
+              if (payload.state) setSnapshot(payload.state);
+              setRowsDirty(false);
+              setSpeakerMenuTurn('');
+              switchTab('transcript');
+              notify('已回到会议准备状态');
+            }).catch(function (error) {
+              notify('新会议失败：' + error.message);
+            });
+          }
+
           function saveProfile() {
             api(API.profile, {
               userName: profile.userName,
@@ -1579,7 +1633,9 @@
               setAgendaFilename(filename);
               setAgendaSource(payload.kind === 'image' ? 'image' : 'file');
               setAgendaWarnings([]);
-              notify('已载入日程文字，点「应用日程」用 AI 解析');
+              notify(payload.images > 0
+                ? '已载入日程文字（另附 ' + payload.images + ' 页截图给 AI 看），点「应用日程」解析'
+                : '已载入日程文字，点「应用日程」用 AI 解析');
             }).catch(function (error) {
               notify('读取日程文件失败：' + error.message);
             }).then(function () { setAgendaBusy(false); });
@@ -1818,6 +1874,19 @@
           var progress = prepareProgress(asr);
           var agenda = snapshot ? (snapshot.active ? snapshot.active.agenda : snapshot.agenda) : null;
           var agendaEntries = agenda && Array.isArray(agenda.entries) ? agenda.entries : [];
+          var participantRoster = (function () {
+            var seen = {};
+            var list = [];
+            agendaEntries.forEach(function (entry) {
+              var name = String((entry && entry.speaker) || '').trim();
+              if (!name) return;
+              var key = normalizePersonName(name);
+              if (seen[key]) return;
+              seen[key] = true;
+              list.push({ name: name, org: String((entry && entry.org) || '').trim() });
+            });
+            return list;
+          })();
           var agendaCurrent = currentAgendaClient(agendaEntries);
 
           if (!snapshot) {
@@ -1873,8 +1942,8 @@
                     type: 'button', className: 'dshm-btn', 'data-kind': 'primary', disabled: !canStart,
                     onClick: startMeeting
                   }, busy === 'start' ? h('span', null, h('span', { className: 'dshm-spinner' }), ' 开始中…') : '开始听会'),
-                active && active.readOnly
-                  ? h('button', { type: 'button', className: 'dshm-btn', 'data-kind': 'ghost', onClick: function () { setForm(formFromActive(null)); } }, '新会议')
+                active && (active.readOnly || active.status === 'ended')
+                  ? h('button', { type: 'button', className: 'dshm-btn', 'data-kind': 'ghost', onClick: startNewMeeting }, '新会议')
                   : null,
                 h('span', { className: 'dshm-timer' }, startedAt ? formatClock(elapsed) : '')
               )
@@ -2337,9 +2406,11 @@
                   key: turn.id,
                   turn: turn,
                   speakers: active && Array.isArray(active.speakers) ? active.speakers : [],
+                  roster: participantRoster,
                   menu: speakerMenuTurn === turn.id,
                   onToggleMenu: function (id) { setSpeakerMenuTurn(speakerMenuTurn === id ? '' : id); },
-                  onPickSpeaker: active && !active.readOnly ? pickTurnSpeaker : null
+                  onPickSpeaker: active && !active.readOnly ? pickTurnSpeaker : null,
+                  onPickPerson: active && !active.readOnly ? pickTurnPerson : null
                 });
               })),
               refine.status === 'refining'

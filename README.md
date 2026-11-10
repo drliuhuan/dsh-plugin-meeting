@@ -83,7 +83,7 @@ and an unmatched name must not spend a model call.
 
 When there is no meeting record for today yet, opening the panel starts a
 three-step setup: name / organization / role, agenda upload (txt, md, csv, json,
-PDF, Word, **PPT**, Excel, ODF, screenshots) parsed by the model into a
+PDF, Word, **PPT**, Excel, ODF, screenshots); the pages are rendered to images and handed to the model together with the extracted text, and the model decides whether to read the text, look at the pages, or both) parsed into a
 structured agenda (and into the meeting topic, domain and the user's role), then
 confirmation in an editable table — start/end time, speaker, organization and
 topic can all be changed, rows added or removed, and microphone capture is a
