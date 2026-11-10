@@ -203,8 +203,8 @@
       '.dshm-sessions{display:flex;flex-direction:column;margin-top:8px}',
       '.dshm-session{padding:6px 0}',
       '.dshm-session + .dshm-session{margin-top:14px;padding-top:14px;border-top:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.16))}',
-      '.dshm-sessionHead{display:grid;grid-template-columns:minmax(0,25%) minmax(0,1fr) auto;gap:6px;align-items:center}',
-      '.dshm-sessionTimes{display:flex;align-items:center;gap:2px;min-width:0}',
+      '.dshm-sessionHead{display:grid;grid-template-columns:132px minmax(0,1fr) auto;gap:6px;align-items:center}',
+      '.dshm-sessionTimes{display:flex;align-items:center;gap:4px;min-width:0;width:132px;flex:none}',
       '.dshm-sessionDash{color:var(--dsw-alias-label-caption,#777);font-size:10px;flex:none}',
       '.dshm-people{display:flex;flex-direction:column;gap:4px;margin-top:6px;padding-left:2px}',
       '.dshm-person{display:grid;grid-template-columns:20px minmax(0,1fr) minmax(0,1fr);gap:5px;align-items:center;min-width:0}',
@@ -213,7 +213,16 @@
       '.dshm-personPlus:hover{color:var(--dsw-alias-state-business-primary,#7fb0ff)}',
       '.dshm-linkBtn{appearance:none;border:none;background:0 0;padding:0 0 0 5px;color:var(--dsw-alias-label-secondary,#b9b9b9);font:inherit;font-size:11px;text-align:left;cursor:pointer}',
       '.dshm-linkBtn:hover{color:var(--dsw-alias-label-primary,#f2f2f2)}',
-      '.dshm-timeInput{width:100%;min-width:0;padding:2px 1px;font-family:ui-monospace,Consolas,monospace;font-size:10.5px;color-scheme:dark}',
+      '.dshm-input.dshm-timeInput{width:58px;min-width:58px;max-width:58px;height:22px;box-sizing:border-box;padding:0 2px;border:1px solid transparent;border-radius:999px;position:relative;',
+      'color:#fff;text-align:center;font:600 10.5px/20px ui-monospace,Consolas,monospace;color-scheme:dark;appearance:none;-webkit-appearance:none;cursor:pointer}',
+      '.dshm-input.dshm-timeInput::-webkit-datetime-edit{padding:0;text-align:center}',
+      '.dshm-input.dshm-timeInput::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;opacity:0;cursor:pointer}',
+      '.dshm-input.dshm-timeInput::-webkit-inner-spin-button{display:none;opacity:0}',
+      '.dshm-input.dshm-timeInput:focus{outline:none;box-shadow:0 0 0 2px rgba(255,255,255,.35)}',
+      '.dshm-input.dshm-timeStart{background:#1f8f4e;border-color:transparent;color:#fff}',
+      '.dshm-input.dshm-timeStart:hover{background:#23a35a}',
+      '.dshm-input.dshm-timeEnd{background:#c0392b;border-color:transparent;color:#fff}',
+      '.dshm-input.dshm-timeEnd:hover{background:#d04434}',
       '.dshm-table{display:flex;flex-direction:column;gap:5px;margin-top:7px}',
       '.dshm-tableRow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) 26px;gap:4px;align-items:center}',
       '.dshm-tableHead{font-size:10px;color:var(--dsw-alias-label-caption,#777);gap:4px}',
@@ -1850,14 +1859,20 @@
                   h('div', { className: 'dshm-sessionHead' },
                     h('div', { className: 'dshm-sessionTimes' },
                       h('input', {
-                        type: 'time', className: 'dshm-input dshm-timeInput', value: row.start,
+                        type: 'time', className: 'dshm-input dshm-timeInput dshm-timeStart', value: row.start,
                         title: '开始时间',
+                        onClick: function (event) {
+                          try { event.currentTarget.showPicker?.(); } catch { /* picker unavailable */ }
+                        },
                         onChange: function (event) { updateRow(index, 'start', event.target.value); }
                       }),
                       h('span', { className: 'dshm-sessionDash' }, '—'),
                       h('input', {
-                        type: 'time', className: 'dshm-input dshm-timeInput', value: row.end,
+                        type: 'time', className: 'dshm-input dshm-timeInput dshm-timeEnd', value: row.end,
                         title: '结束时间',
+                        onClick: function (event) {
+                          try { event.currentTarget.showPicker?.(); } catch { /* picker unavailable */ }
+                        },
                         onChange: function (event) { updateRow(index, 'end', event.target.value); }
                       })),
                     h('input', {
