@@ -44,6 +44,14 @@
   "engines": {
     "node": ">=22"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drliuhuan/dsh-plugin-meeting.git"
+  },
+  "homepage": "https://github.com/drliuhuan/dsh-plugin-meeting#readme",
+  "bugs": {
+    "url": "https://github.com/drliuhuan/dsh-plugin-meeting/issues"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
