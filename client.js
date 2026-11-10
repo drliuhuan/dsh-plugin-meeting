@@ -140,12 +140,12 @@
       '.dshm-toggle-label{display:inline}',
       '@media (max-width:1180px){.dshm-toggle-label{display:none}}',
 
-      '.dshm-panel{position:fixed;top:0;right:0;bottom:0;width:var(--dsh-meeting-width,540px);z-index:74;display:flex;',
+      '.dshm-panel{position:fixed;top:0;right:0;bottom:0;width:var(--dsh-meeting-width,540px);min-width:420px;max-width:86vw;z-index:74;display:flex;',
       'flex-direction:column;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.14));border-right:0;border-top:0;border-bottom:0;',
       'border-radius:0;overflow:hidden;background:var(--dsw-alias-bg-module-platform,#1f1f1f);color:var(--dsw-alias-label-primary,#f2f2f2);',
       'box-shadow:-18px 0 48px rgba(0,0,0,.28);font:13px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}',
       'html.dsh-meeting-sidebar #root{margin-right:var(--dsh-meeting-width,540px)!important;transition:margin-right .22s ease}',
-      'html[data-windows-titlebar] .dshm-panel{top:var(--dsh-windows-titlebar-height,40px)}',
+
       '@media (max-width:900px){',
       'html.dsh-meeting-sidebar #root{margin-right:0!important}',
       '.dshm-panel{top:8px;right:8px;bottom:8px;left:8px;width:auto;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.14));border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.42)}',
@@ -221,7 +221,12 @@
       '.dshm-cardTitle{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:650;margin:0 0 4px}',
       '.dshm-muted{color:var(--dsw-alias-label-tertiary,#9a9a9a);font-size:11.5px;line-height:1.55;margin:0}',
       '.dshm-note{color:var(--dsw-alias-label-secondary,#c7c7c7);font-size:11.5px;line-height:1.6}',
-      '.dshm-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}',
+      '.dshm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px 10px}',
+      '.dshm-tabs{display:flex;gap:2px;padding:6px 10px;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.1));flex:none;overflow-x:auto;scrollbar-width:none}',
+      '.dshm-tabs::-webkit-scrollbar{display:none}',
+      '.dshm-tab{flex:none}',
+      '.dshm-resizer{position:absolute;left:0;top:0;bottom:0;width:7px;cursor:ew-resize;z-index:90;background:0 0}',
+      '.dshm-resizer:hover,.dshm-resizer[data-active="true"]{background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#3f7cff) 55%,transparent)}',
       '@media (max-width:520px){.dshm-grid{grid-template-columns:1fr}}',
       '.dshm-field{display:flex;flex-direction:column;gap:3px;min-width:0}',
       '.dshm-field > span{font-size:10.5px;color:var(--dsw-alias-label-tertiary,#9a9a9a);font-weight:600;letter-spacing:.02em}',
@@ -1809,6 +1814,50 @@
             );
           }
 
+          // ---- sidebar width -------------------------------------------------
+          // The width lives in a CSS variable: the panel and the shell margin
+          // both read it, so the transcript re-flows while the user drags.
+          function applyPanelWidth(width) {
+            var min = 420;
+            var max = Math.max(min, Math.min(1100, Math.round(window.innerWidth * 0.86)));
+            var value = Math.max(min, Math.min(max, Math.round(Number(width) || 540)));
+            document.documentElement.style.setProperty('--dsh-meeting-width', value + 'px');
+            return value;
+          }
+
+          function onResizeStart(event) {
+            if (typeof event.button === 'number' && event.button !== 0) return;
+            event.preventDefault();
+            var handle = event.currentTarget;
+            if (handle && handle.setAttribute) handle.setAttribute('data-active', 'true');
+            function move(e) { applyPanelWidth(window.innerWidth - e.clientX); }
+            function finish(e) {
+              var width = applyPanelWidth(window.innerWidth - e.clientX);
+              try { localStorage.setItem('dsh-meeting:width:v1', String(width)); } catch { /* private mode */ }
+              if (handle && handle.removeAttribute) handle.removeAttribute('data-active');
+              window.removeEventListener('pointermove', move);
+              window.removeEventListener('pointerup', finish);
+              window.removeEventListener('pointercancel', finish);
+            }
+            window.addEventListener('pointermove', move);
+            window.addEventListener('pointerup', finish);
+            window.addEventListener('pointercancel', finish);
+          }
+
+          React.useEffect(function () {
+            var saved = 0;
+            try { saved = Number(localStorage.getItem('dsh-meeting:width:v1')) || 0; } catch { saved = 0; }
+            if (saved >= 420) applyPanelWidth(saved);
+            function onWindowResize() {
+              var current = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--dsh-meeting-width'), 10);
+              if (!Number.isFinite(current) || current > window.innerWidth * 0.86) {
+                applyPanelWidth(window.innerWidth * 0.86);
+              }
+            }
+            window.addEventListener('resize', onWindowResize);
+            return function () { window.removeEventListener('resize', onWindowResize); };
+          }, []);
+
           function onAgendaFile(event) {
             var file = event.target.files && event.target.files[0];
             event.target.value = '';
@@ -1935,6 +1984,9 @@
             setTab(nextTab);
             setStore({ tab: nextTab });
             atBottomRef.current = true;
+            // The settings panel is a tab now, not a modal overlay.
+            setShowSettings(nextTab === 'settings');
+            if (nextTab === 'settings' && devices.length === 0) refreshDevices();
           }
 
           var status = statusInfo(active, snapshot && snapshot.asr, busy);
@@ -1991,6 +2043,7 @@
             onDragLeave: onPanelDragLeave,
             onDrop: onPanelDrop
           },
+            h('div', { className: 'dshm-resizer', title: '拖动调整宽度', onPointerDown: onResizeStart }),
             dragOver
               ? h('div', { className: 'dshm-dropOverlay' }, '松开以载入日程文件（或点「上传 / 拖入日程」）')
               : null,
@@ -2003,15 +2056,11 @@
                 ),
                 h('div', { className: 'dshm-headActions' },
                   h('button', {
-                    type: 'button', className: 'dshm-iconBtn', title: '历史会议',
+                    type: 'button', className: 'dshm-btn', 'data-kind': 'small',
                     'data-on': historyOpen ? 'true' : 'false',
+                    title: '历史会议',
                     onClick: function () { setHistoryOpen(!historyOpen); }
-                  }, '☰'),
-                  h('button', {
-                    type: 'button', className: 'dshm-iconBtn', title: '会议设置',
-                    'data-on': showSettings ? 'true' : 'false',
-                    onClick: function () { setShowSettings(!showSettings); if (!devices.length) refreshDevices(); }
-                  }, '⚙'),
+                  }, '历史会议'),
                   h('button', {
                     type: 'button', className: 'dshm-iconBtn', title: '关闭',
                     onClick: function () { setStore({ open: false }); }
@@ -2047,12 +2096,16 @@
               h('button', {
                 type: 'button', className: 'dshm-tab', 'data-on': tab === 'qa' ? 'true' : 'false',
                 onClick: function () { switchTab('qa'); }
-              }, '提问', answers.length > 0 ? h('span', { className: 'dshm-badge' }, String(answers.length)) : null),
+              }, '问AI', answers.length > 0 ? h('span', { className: 'dshm-badge' }, String(answers.length)) : null),
               h('button', {
                 type: 'button', className: 'dshm-tab', 'data-on': tab === 'script' ? 'true' : 'false',
                 onClick: function () { switchTab('script'); }
               }, '讲词串词', snapshot && snapshot.script && snapshot.script.status === 'writing'
-                ? h('span', { className: 'dshm-spinner' }) : null)
+                ? h('span', { className: 'dshm-spinner' }) : null),
+              h('button', {
+                type: 'button', className: 'dshm-tab', 'data-on': tab === 'settings' ? 'true' : 'false',
+                onClick: function () { switchTab('settings'); }
+              }, '会议设置')
             ),
 
             agendaEntries.length > 0
@@ -2413,7 +2466,7 @@
                 h('div', { className: 'dshm-row', style: { marginTop: '6px' } },
                   h('button', {
                     type: 'button', className: 'dshm-btn', 'data-kind': 'ghost',
-                    onClick: function () { setForceWizard(true); setWizardDismissed(false); setShowSettings(false); }
+                    onClick: function () { setForceWizard(true); setWizardDismissed(false); switchTab('transcript'); }
                   }, '重新初始化会议'))
               ),
               asr && asr.available === false
@@ -2592,7 +2645,7 @@
                 h('p', { className: 'dshm-muted' }, '在设置里填写「我的姓名」并上传会议日程；只有当你的名字出现在日程里时，才会为你生成讲词和串词。'),
                 h('button', {
                   type: 'button', className: 'dshm-btn', 'data-kind': 'primary',
-                  onClick: function () { setShowSettings(true); }
+                  onClick: function () { switchTab('settings'); }
                 }, '去设置日程和姓名')
               );
             }
