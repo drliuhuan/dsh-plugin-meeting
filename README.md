@@ -21,7 +21,10 @@ already configured in DSH.
   documents (`PDF`, `Word`, `PPT`, `Excel`, ODF), and images (`png`, `jpg`,
   `webp`, `bmp`): Word/PPT/ODF text is read directly; PDF, legacy Office and
   images are rendered locally with DSH's LibreOffice kit and read with Windows
-  OCR. Time ranges, speaker names and organizations become the current-item
+  OCR. The text is parsed locally first so the panel is usable immediately, and
+  the configured DSH model then structures it into time / speaker / unit / topic
+  fields (merged rows and OCR noise included). Time ranges, speaker names and
+  organizations become the current-item
   indicator, speaker-name suggestions, and reference context for correction,
   minutes and Q&A.
 - A durable **my name** profile (set in the panel settings, stored at
