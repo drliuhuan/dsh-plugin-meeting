@@ -6,6 +6,14 @@ import { PcmTo16k, VadSegmenter, encodeWav16 } from '../lib/audio.mjs';
 import { parseAgenda, currentAgenda, agendaSpeakers, normalizeOcrText } from '../lib/agenda.mjs';
 import { extractOfficeText } from '../lib/office.mjs';
 import { SpeakerClusterer } from '../lib/speaker.mjs';
+import {
+  DEFAULT_SCRIPT_PROMPT,
+  buildScriptSystemPrompt,
+  formatScriptAgenda,
+  markAgendaEntries,
+  nameMatches,
+  normalizePersonName
+} from '../lib/script.mjs';
 
 // --- agenda ---------------------------------------------------------------
 const agendaText = [
@@ -29,6 +37,40 @@ const csv = 'start,end,speaker,org,topic\n14:00,14:30,张医生,市医院,病例
 const parsedCsv = parseAgenda(csv, 'agenda.csv');
 assert.equal(parsedCsv.entries.length, 1);
 assert.equal(parsedCsv.entries[0].topic, '病例分享');
+
+// --- user-only speech drafts (讲词/串词) -----------------------------------
+assert.equal(normalizePersonName(' 张 医 生 '), '张医生');
+assert.equal(nameMatches('张医生（市医院）', '张医生'), true);
+assert.equal(nameMatches('Zhang Wei', 'zhang wei'), true);
+assert.equal(nameMatches('张医生', '李主任'), false);
+assert.equal(nameMatches('', '张医生'), false);
+const marked = markAgendaEntries(parsed.entries, '张医生');
+assert.deepEqual(marked.map((item) => item.mine), [true, false, false]);
+const scriptPrompt = buildScriptSystemPrompt({
+  entries: parsed.entries,
+  userName: '张医生',
+  userOrg: '市医院',
+  title: '创面修复研讨会',
+  topic: '创面修复',
+  domainLabel: '医学',
+  prompt: ''
+});
+assert.match(scriptPrompt, /我的姓名：张医生（市医院）/);
+assert.match(scriptPrompt, /［我的环节］/);
+assert.match(scriptPrompt, /只输出我的内容/);
+assert.match(scriptPrompt, /14:00-14:30 张医生（市医院）：创面修复病例分享/);
+assert.ok(scriptPrompt.includes(DEFAULT_SCRIPT_PROMPT));
+const customPrompt = buildScriptSystemPrompt({
+  entries: parsed.entries,
+  userName: '张医生',
+  prompt: '每段讲词不超过 80 字，语气更轻松'
+});
+assert.match(customPrompt, /每段讲词不超过 80 字，语气更轻松/);
+assert.doesNotMatch(customPrompt, /每段讲词 120–300 字/);
+const liAgenda = formatScriptAgenda(parsed.entries, '李主任').split('\n');
+assert.ok(!liAgenda[0].includes('［我的环节］'));
+assert.ok(liAgenda[1].includes('［我的环节］'));
+assert.ok(!liAgenda[2].includes('［我的环节］'));
 
 // --- OCR spacing and OOXML text extraction --------------------------------
 const ocrText = normalizeOcrText('会 议 日 程 14 ： 00 · 14 ： 30 张 医 生 （ 市 医 院 ） 病 例 14 ： 30 · 15 ： 00 讨 论');
@@ -129,4 +171,4 @@ const wav = encodeWav16(segments[0].samples);
 assert.equal(wav.subarray(0, 4).toString(), 'RIFF');
 assert.equal(wav.readUInt32LE(24), 16000);
 
-console.log('selftest: agenda parsing, OCR spacing, OOXML extraction, speaker clustering, audio/VAD all passed');
+console.log('selftest: agenda parsing, OCR spacing, OOXML extraction, user-only script prompts, speaker clustering, audio/VAD all passed');

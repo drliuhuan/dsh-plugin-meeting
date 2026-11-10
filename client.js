@@ -20,6 +20,8 @@
     stop: '/dsh-meeting/stop',
     ask: '/dsh-meeting/ask',
     settings: '/dsh-meeting/settings',
+    profile: '/dsh-meeting/profile',
+    script: '/dsh-meeting/script',
     prepare: '/dsh-meeting/prepare',
     devices: '/dsh-meeting/devices',
     history: '/dsh-meeting/history',
@@ -376,6 +378,27 @@
       : '未定时间';
     var who = entry.speaker ? entry.speaker + (entry.org ? '（' + entry.org + '）' : '') : '';
     return time + ' ' + who + (who && entry.topic ? '：' : '') + (entry.topic || '');
+  }
+
+  // Mirrors lib/script.mjs: the client needs the same "is this slot mine?"
+  // hint to explain why nothing was generated without a round trip.
+  function normalizePersonName(value) {
+    return String(value || '').replace(/[\s·•・]/g, '').trim().toLowerCase();
+  }
+
+  function nameMatches(speaker, userName) {
+    var left = normalizePersonName(speaker);
+    var right = normalizePersonName(userName);
+    if (left.length === 0 || right.length === 0) return false;
+    return left === right || left.indexOf(right) >= 0 || right.indexOf(left) >= 0;
+  }
+
+  function agendaMatchesUser(entries, userName) {
+    var name = String(userName || '').trim();
+    if (name.length === 0) return false;
+    return (Array.isArray(entries) ? entries : []).some(function (entry) {
+      return entry && nameMatches(entry.speaker, name);
+    });
   }
 
   function groupTranscript(lines) {
@@ -937,6 +960,8 @@
           var [devices, setDevices] = React.useState([]);
           var [micDevices, setMicDevices] = React.useState([]);
           var [showSettings, setShowSettings] = React.useState(false);
+          var [profile, setProfile] = React.useState({ userName: '', userOrg: '' });
+          var [scriptPrompt, setScriptPrompt] = React.useState('');
           var [following, setFollowing] = React.useState(true);
           var [dragOver, setDragOver] = React.useState(false);
           var [agendaDraft, setAgendaDraft] = React.useState('');
@@ -948,6 +973,8 @@
           var initializedRef = React.useRef(false);
           var activeIdRef = React.useRef('none');
           var settingsWasOpenRef = React.useRef(false);
+          var profileAppliedRef = React.useRef('');
+          var scriptPromptRef = React.useRef('');
           var toastTimer = React.useRef(null);
           var sseRef = React.useRef(null);
 
@@ -985,6 +1012,18 @@
             }
             if (type === 'recognized') {
               setRecognizing(null);
+              return;
+            }
+            if (type === 'script') {
+              setSnapshot(function (previous) {
+                return previous ? Object.assign({}, previous, { script: payload }) : previous;
+              });
+              return;
+            }
+            if (type === 'profile') {
+              setSnapshot(function (previous) {
+                return previous ? Object.assign({}, previous, { profile: payload }) : previous;
+              });
               return;
             }
             setSnapshot(function (previous) {
@@ -1133,7 +1172,7 @@
                 source.onopen = function () { setConnection('open'); };
                 source.onerror = function () { setConnection('reconnecting'); };
                 ['state', 'status', 'asr', 'speaker', 'agenda', 'turn', 'refine', 'capture', 'line', 'line-update', 'summary', 'answer',
-                  'answer-delta', 'settings', 'warning', 'error', 'recognizing', 'recognized'].forEach(function (type) {
+                  'answer-delta', 'settings', 'profile', 'script', 'warning', 'error', 'recognizing', 'recognized'].forEach(function (type) {
                   source.addEventListener(type, function (event) {
                     var payload;
                     try {
@@ -1175,6 +1214,29 @@
             var agenda = snapshot.active ? snapshot.active.agenda : snapshot.agenda;
             setAgendaDraft(agenda && typeof agenda.text === 'string' ? agenda.text : '');
             setAgendaWarnings(agenda && Array.isArray(agenda.warnings) ? agenda.warnings : []);
+          }, [snapshot]);
+
+          // The profile is durable on the Host; mirror it into the panel.  The
+          // ref guard keeps a half-typed name from being reverted by unrelated
+          // SSE state events (every new transcript line refreshes the snapshot).
+          React.useEffect(function () {
+            if (!snapshot) return;
+            var source = snapshot.profile && typeof snapshot.profile === 'object' ? snapshot.profile : {};
+            var next = { userName: source.userName || '', userOrg: source.userOrg || '' };
+            var key = next.userName + '\u0000' + next.userOrg;
+            if (profileAppliedRef.current === key) return;
+            profileAppliedRef.current = key;
+            setProfile(next);
+          }, [snapshot]);
+
+          // Keep the prompt editor in sync with the draft the Host reports,
+          // without clobbering what the user is currently typing.
+          React.useEffect(function () {
+            if (!snapshot || !snapshot.script) return;
+            var prompt = typeof snapshot.script.prompt === 'string' ? snapshot.script.prompt : '';
+            if (scriptPromptRef.current === prompt) return;
+            scriptPromptRef.current = prompt;
+            setScriptPrompt(prompt);
           }, [snapshot]);
 
           React.useEffect(function () {
@@ -1295,12 +1357,39 @@
             });
           }
 
+          function saveProfile() {
+            api(API.profile, { userName: profile.userName, userOrg: profile.userOrg }).then(function (payload) {
+              if (payload.state) setSnapshot(payload.state);
+              var script = payload.state && payload.state.script;
+              if (script && script.status === 'writing') {
+                notify('我的姓名已保存，正在生成我的讲词与串词');
+              } else if (!profile.userName.trim()) {
+                notify('已清空我的姓名');
+              } else {
+                notify('我的姓名已保存；日程里出现你的名字时才会生成讲词');
+              }
+            }).catch(function (error) {
+              notify('保存我的信息失败：' + error.message);
+            });
+          }
+
+          function regenerateScripts() {
+            api(API.script, { prompt: scriptPrompt }).then(function (payload) {
+              if (payload.state) setSnapshot(payload.state);
+              notify('正在生成我的讲词与串词…');
+            }).catch(function (error) {
+              notify('生成讲词失败：' + error.message);
+            });
+          }
+
           function applyAgenda(text, filename) {
             setAgendaBusy(true);
             api(API.agenda, { text: text === undefined ? agendaDraft : text, filename: filename || agendaFilename }).then(function (payload) {
               if (payload.state) setSnapshot(payload.state);
               setAgendaWarnings(payload.agenda && Array.isArray(payload.agenda.warnings) ? payload.agenda.warnings : []);
-              notify('会议日程已更新');
+              var entries = payload.agenda && Array.isArray(payload.agenda.entries) ? payload.agenda.entries : [];
+              var savedName = payload.state && payload.state.profile ? payload.state.profile.userName : profile.userName;
+              notify('会议日程已更新' + (agendaMatchesUser(entries, savedName) ? '，正在生成我的讲词与串词' : ''));
             }).catch(function (error) {
               notify('保存日程失败：' + error.message);
             }).then(function () { setAgendaBusy(false); });
@@ -1313,7 +1402,10 @@
               var agenda = payload.agenda || (payload.state && payload.state.agenda);
               if (agenda && typeof agenda.text === 'string') setAgendaDraft(agenda.text);
               setAgendaWarnings(agenda && Array.isArray(agenda.warnings) ? agenda.warnings : []);
-              notify('已从日程文件提取文字（' + ((agenda && agenda.entries && agenda.entries.length) || 0) + ' 条）');
+              var entries = agenda && Array.isArray(agenda.entries) ? agenda.entries : [];
+              var savedName = payload.state && payload.state.profile ? payload.state.profile.userName : profile.userName;
+              notify('已从日程文件提取文字（' + entries.length + ' 条）' +
+                (agendaMatchesUser(entries, savedName) ? '，正在生成我的讲词与串词' : ''));
             }).catch(function (error) {
               notify('读取日程文件失败：' + error.message);
             }).then(function () { setAgendaBusy(false); });
@@ -1523,7 +1615,12 @@
               h('button', {
                 type: 'button', className: 'dshm-tab', 'data-on': tab === 'qa' ? 'true' : 'false',
                 onClick: function () { switchTab('qa'); }
-              }, '提问', answers.length > 0 ? h('span', { className: 'dshm-badge' }, String(answers.length)) : null)
+              }, '提问', answers.length > 0 ? h('span', { className: 'dshm-badge' }, String(answers.length)) : null),
+              h('button', {
+                type: 'button', className: 'dshm-tab', 'data-on': tab === 'script' ? 'true' : 'false',
+                onClick: function () { switchTab('script'); }
+              }, '讲词串词', snapshot && snapshot.script && snapshot.script.status === 'writing'
+                ? h('span', { className: 'dshm-spinner' }) : null)
             ),
 
             agendaCurrent.entry && agendaCurrent.status !== 'ended'
@@ -1538,7 +1635,8 @@
               showSettings ? renderSettings() : null,
               tab === 'transcript' ? renderTranscript() : null,
               tab === 'summary' ? renderSummary() : null,
-              tab === 'qa' ? renderQa() : null
+              tab === 'qa' ? renderQa() : null,
+              tab === 'script' ? renderScripts() : null
             ),
 
             h('div', { className: 'dshm-foot' },
@@ -1555,6 +1653,33 @@
 
           function renderSettings() {
             return h('div', { className: 'dshm-section' },
+              h('div', { className: 'dshm-card' },
+                h('div', { className: 'dshm-cardTitle' }, '我的信息', h('span', { className: 'dshm-muted' }, '永久保存在本机')),
+                h('p', { className: 'dshm-muted' }, '填写姓名后，只有当日程里出现你的名字时，插件才会为你生成「讲词」和「串词」；不会替别人写稿。'),
+                h('div', { className: 'dshm-grid' },
+                  field('我的姓名', h('input', {
+                    className: 'dshm-input', value: profile.userName, placeholder: '例如：张医生',
+                    onChange: function (event) { setProfile(Object.assign({}, profile, { userName: event.target.value })); }
+                  })),
+                  field('我的单位（可选）', h('input', {
+                    className: 'dshm-input', value: profile.userOrg, placeholder: '例如：市医院',
+                    onChange: function (event) { setProfile(Object.assign({}, profile, { userOrg: event.target.value })); }
+                  }))
+                ),
+                h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
+                  h('button', { type: 'button', className: 'dshm-btn', 'data-kind': 'primary', onClick: saveProfile }, '保存我的信息'),
+                  (function () {
+                    var saved = snapshot && snapshot.profile && snapshot.profile.userName ? snapshot.profile.userName : '';
+                    return [
+                      h('span', { key: 'saved', className: 'dshm-pill', 'data-tone': saved ? 'good' : 'bad' },
+                        saved ? '已保存：' + saved : '未设置姓名'),
+                      profile.userName.trim() !== saved
+                        ? h('span', { key: 'dirty', className: 'dshm-muted' }, '（有未保存的修改）')
+                        : null
+                    ];
+                  })()
+                )
+              ),
               h('div', { className: 'dshm-card' },
                 h('div', { className: 'dshm-cardTitle' }, '会议上下文', h('span', { className: 'dshm-muted' }, '决定校正措辞、翻译与纪要风格')),
                 h('div', { className: 'dshm-grid' },
@@ -1844,6 +1969,94 @@
               summary.markdown
                 ? h(Markdown, { text: summary.markdown })
                 : h('p', { className: 'dshm-muted' }, active.status === 'listening' ? '攒够几句话后会自动生成第一版纪要。' : '还没有纪要内容。')
+            );
+          }
+
+          function renderScripts() {
+            var script = snapshot && snapshot.script ? snapshot.script : null;
+            var savedProfile = snapshot && snapshot.profile ? snapshot.profile : {};
+            var userName = (savedProfile.userName || '').trim();
+            var ownEntries = userName
+              ? agendaEntries.filter(function (entry) { return entry && nameMatches(entry.speaker, userName); })
+              : [];
+            var writing = script && script.status === 'writing';
+            var stale = script && script.status === 'done' && script.markdown && agenda
+              && agenda.updatedAt && Number(script.agendaUpdatedAt) !== Number(agenda.updatedAt);
+
+            if (agendaEntries.length === 0) {
+              return h('div', { className: 'dshm-empty' },
+                h('div', { className: 'dshm-emptyTitle' }, '上传会议日程后生成我的讲词与串词'),
+                h('p', { className: 'dshm-muted' }, '在设置里填写「我的姓名」并上传会议日程；只有当你的名字出现在日程里时，才会为你生成讲词和串词。'),
+                h('button', {
+                  type: 'button', className: 'dshm-btn', 'data-kind': 'primary',
+                  onClick: function () { setShowSettings(true); }
+                }, '去设置日程和姓名')
+              );
+            }
+
+            var blocked = !userName
+              ? '先在设置里填写「我的姓名」，才会生成属于你的讲词与串词。'
+              : ownEntries.length === 0
+                ? '日程里没有出现“' + userName + '”，所以不生成讲词。请让日程里的讲者写法与你的姓名一致，或修改日程/姓名后重试。'
+                : '';
+
+            return h('div', { className: 'dshm-section' },
+              h('div', { className: 'dshm-card' },
+                h('div', { className: 'dshm-cardTitle' }, '我的讲词与串词',
+                  h('span', { className: 'dshm-spacer', style: { flex: 1 } }),
+                  script && script.markdown && !writing
+                    ? h('span', { className: 'dshm-muted' }, script.updatedAt ? formatDate(script.updatedAt) : '')
+                    : null,
+                  active && active.readOnly ? null : h('button', {
+                    type: 'button', className: 'dshm-btn', 'data-kind': 'small',
+                    disabled: writing || blocked.length > 0,
+                    onClick: regenerateScripts
+                  }, writing ? '生成中…' : '重新生成')
+                ),
+                blocked.length > 0 ? h('div', { className: 'dshm-warning' }, blocked) : null,
+                writing
+                  ? h('p', { className: 'dshm-muted' }, h('span', { className: 'dshm-spinner' }), ' 正在按日程和我的姓名撰写…')
+                  : null,
+                script && script.error && !writing
+                  ? h('div', { className: 'dshm-warning' }, '生成失败：' + script.error)
+                  : null,
+                stale
+                  ? h('div', { className: 'dshm-warning' }, '日程已更新，上面的讲词可能已经过期，点「重新生成」刷新。')
+                  : null,
+                ownEntries.length > 0
+                  ? h('p', { className: 'dshm-muted', style: { marginTop: '6px' } },
+                    '日程中属于我的环节：' + ownEntries.map(function (entry) { return agendaEntryText(entry); }).join('；'))
+                  : null,
+                script && script.markdown
+                  ? h('div', { style: { marginTop: '8px' } }, h(Markdown, { text: script.markdown }))
+                  : h('p', { className: 'dshm-muted', style: { marginTop: '6px' } },
+                    ownEntries.length > 0 ? '点「重新生成」生成属于你的讲词与串词。' : '')
+              ),
+              h('div', { className: 'dshm-card' },
+                h('div', { className: 'dshm-cardTitle' }, '生成提示词',
+                  h('span', { className: 'dshm-muted' }, '只影响我的讲词和串词')),
+                h('p', { className: 'dshm-muted' }, '这是写给模型的「写作要求」，可以改成你想要的风格、长度或重点；留空则使用默认提示词。修改后点「用这个提示词重新生成」。'),
+                h('textarea', {
+                  className: 'dshm-textarea', rows: 8, value: scriptPrompt,
+                  placeholder: script && script.defaultPrompt ? script.defaultPrompt : '留空使用默认提示词',
+                  onChange: function (event) { setScriptPrompt(event.target.value); }
+                }),
+                h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
+                  h('button', {
+                    type: 'button', className: 'dshm-btn', 'data-kind': 'primary',
+                    disabled: writing || blocked.length > 0,
+                    onClick: regenerateScripts
+                  }, '用这个提示词重新生成'),
+                  h('button', {
+                    type: 'button', className: 'dshm-btn', 'data-kind': 'ghost',
+                    onClick: function () {
+                      // Keep the server prompt in the ref: the sync effect must
+                      // not restore the old custom prompt on the next snapshot.
+                      setScriptPrompt('');
+                    }
+                  }, '恢复默认提示词')
+                )
+              )
             );
           }
 

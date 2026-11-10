@@ -24,6 +24,14 @@ already configured in DSH.
   OCR. Time ranges, speaker names and organizations become the current-item
   indicator, speaker-name suggestions, and reference context for correction,
   minutes and Q&A.
+- A durable **my name** profile (set in the panel settings, stored at
+  `~/.dsh/meetings/profile.json`): it never depends on the current meeting.
+- **My speech drafts**: after an agenda upload, only when the user's own name
+  appears in the agenda, the model writes the user's own speeches and the
+  transitions they have to say — no generic host script, nothing for other
+  speakers. The writing instructions are editable and the draft can be
+  regenerated at any time; the Markdown result survives page reloads and is
+  stored with the meeting.
 - Local CAM++ voice clustering into 发言人 1/2/3 (about 27 MB): consecutive
   turns by one speaker are merged into one continuous block; a one-minute pass
   re-corrects the whole conversation to join lines split by the 10-second ASR
@@ -41,6 +49,23 @@ already configured in DSH.
 - Q&A grounded in the minutes and transcript, with `[mm:ss]` citations and
   optional `ctx.web` search sources.
 - On-disk history under `~/.dsh/meetings/<id>/`.
+
+## My speech drafts (讲词 / 串词)
+
+1. Open settings → **我的信息**, enter **我的姓名** (and optionally the
+   organization) and save. The profile is stored on this machine and survives
+   restarts.
+2. Upload or paste the meeting agenda. If at least one agenda speaker matches
+   the saved name, the plugin automatically writes:
+   - **我的讲词** — for the agenda slots that belong to the user;
+   - **我的串词** — the transitions the user has to say around those slots.
+3. Open the **讲词串词** tab to read or regenerate the draft. The textarea in
+   **生成提示词** is the writing instruction sent to the model; edit it and press
+   **用这个提示词重新生成**. Leave it empty to use the built-in default.
+
+Nothing is generated when no name is saved, or when the saved name does not
+appear in the agenda: the draft is for the user only, never a generic script,
+and an unmatched name must not spend a model call.
 
 ## Requirements
 
@@ -74,6 +99,10 @@ system audio -> WASAPI loopback (native helper) -> downmix/resample 16 kHz
   -> rolling summary (LLM) and Q&A (minutes + transcript + optional web search)
 
 agenda (txt/md/csv/json) -> current time slot + speaker/org reference
+
+agenda + my-name profile -> only slots whose speaker matches my name
+  -> LLM (editable writing prompt) -> Markdown 讲词/串词
+  -> stored with the meeting, or as a pending draft before it starts
 ```
 
 The native helper is `native/LoopbackCapture.cs` (C# / .NET Framework 4.x). A

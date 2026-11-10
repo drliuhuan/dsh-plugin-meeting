@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-meeting",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DeepSeek Harness Web UI plugin: capture meeting system audio, transcribe with local SenseVoice, let DSH's LLM correct domain wording and optionally translate, keep a live summary, and answer questions from the meeting with web lookup.",
   "type": "module",
   "license": "MIT",
