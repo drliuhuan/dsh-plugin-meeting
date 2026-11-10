@@ -1644,11 +1644,19 @@
             api(API.agendaFile, { fileBase64: dataUrl, filename: filename }).then(function (payload) {
               if (typeof payload.text === 'string') setAgendaDraft(payload.text);
               setAgendaFilename(filename);
-              setAgendaSource(payload.kind === 'image' ? 'image' : 'file');
-              setAgendaWarnings([]);
-              notify(payload.images > 0
-                ? '已载入日程文字（另附 ' + payload.images + ' 页截图给 AI 看），点「应用日程」解析'
-                : '已载入日程文字，点「应用日程」用 AI 解析');
+              setAgendaWarnings(payload.agenda && Array.isArray(payload.agenda.warnings) ? payload.agenda.warnings : []);
+              if (payload.state) setSnapshot(payload.state);
+              var entries = payload.agenda && Array.isArray(payload.agenda.entries) ? payload.agenda.entries : [];
+              if (payload.parsed) {
+                // The import already ran the model; nothing left to click.
+                setAgendaSource('');
+                var savedName = payload.state && payload.state.profile ? payload.state.profile.userName : profile.userName;
+                notify('已导入并解析：' + entries.length + ' 条' +
+                  (agendaMatchesUser(entries, savedName) ? '，正在生成我的讲词与串词' : ''));
+              } else {
+                setAgendaSource(payload.kind === 'image' ? 'image' : 'file');
+                notify('已导入文字，但 AI 解析失败：' + (payload.error || '未知错误') + '；可修改文字后点「应用日程」重试');
+              }
             }).catch(function (error) {
               notify('读取日程文件失败：' + error.message);
             }).then(function () { setAgendaBusy(false); });
