@@ -109,6 +109,12 @@ assert.match(thanksCuePrompt, /感谢主持人的介绍/);
 assert.doesNotMatch(thanksCuePrompt, /总结刚刚结束环节/);
 
 // --- OCR spacing and OOXML text extraction --------------------------------
+// A line that is only a time range (or only a dash) must not throw: every
+// splitSpeakerOrg branch has to return the same shape.
+const bareTime = parseAgenda('14:00-14:30\n15:00-15:20 茶歇\n16:00-', 'bare.txt');
+assert.ok(Array.isArray(bareTime.entries));
+assert.equal(bareTime.entries.some((entry) => entry.startMin === 840), true);
+
 const ocrText = normalizeOcrText('会 议 日 程 14 ： 00 · 14 ： 30 张 医 生 （ 市 医 院 ） 病 例 14 ： 30 · 15 ： 00 讨 论');
 const ocrParsed = parseAgenda(ocrText, 'ocr.txt');
 assert.equal(ocrParsed.entries.length, 2);
