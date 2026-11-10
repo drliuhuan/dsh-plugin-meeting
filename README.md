@@ -21,14 +21,16 @@ already configured in DSH.
   documents (`PDF`, `Word`, `PPT`, `Excel`, ODF), and images (`png`, `jpg`,
   `webp`, `bmp`): Word/PPT/ODF text is read directly; PDF, legacy Office and
   images are rendered locally with DSH's LibreOffice kit and read with Windows
-  OCR. The text is parsed locally first so the panel is usable immediately, and
-  the configured DSH model then structures it into time / speaker / unit / topic
-  fields (merged rows and OCR noise included). Time ranges, speaker names and
-  organizations become the current-item
+  OCR. Nothing is parsed on upload: clicking Apply sends the text to the
+  configured DSH model, which returns time / speaker / unit / topic columns plus
+  the meeting topic and domain (merged rows and OCR noise included). Click the
+  agenda bar to pin the current item, and click a speaker chip to reassign that
+  turn. Time ranges, speaker names and organizations become the current-item
   indicator, speaker-name suggestions, and reference context for correction,
   minutes and Q&A.
-- A durable **my name** profile (set in the panel settings, stored at
-  `~/.dsh/meetings/profile.json`): it never depends on the current meeting.
+- A durable **my name + meeting domain** profile (set in the panel settings,
+  stored at `~/.dsh/meetings/profile.json`): it never depends on the current
+  meeting or the app session.
 - **My speech drafts**: after an agenda upload, only when the user's own name
   appears in the agenda, the model writes the user's own speeches and the
   transitions they have to say — no generic host script, nothing for other
@@ -47,7 +49,7 @@ already configured in DSH.
 - A right-hand sidebar: opening the panel shifts the DSH shell left, and the
   header icon breathes green while listening.
 - Raw ASR text kept behind a disclosure, with retry for failed corrections.
-- Rolling minutes (conclusion / discussion / decisions / action items / risks)
+- Minutes on demand (conclusion / discussion / decisions / action items / risks); nothing is generated on a timer, and the agenda is included in the prompt
   and a final version when the meeting ends.
 - Q&A grounded in the minutes and transcript, with `[mm:ss]` citations and
   optional `ctx.web` search sources.
