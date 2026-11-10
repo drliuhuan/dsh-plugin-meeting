@@ -79,6 +79,21 @@ Nothing is generated when no name is saved, or when the saved name does not
 appear in the agenda: the draft is for the user only, never a generic script,
 and an unmatched name must not spend a model call.
 
+## First open of the day (setup flow)
+
+When there is no meeting record for today yet, opening the panel starts a
+three-step setup: name / organization / role, agenda upload (txt, md, csv, json,
+PDF, Word, **PPT**, Excel, ODF, screenshots) parsed by the model into a
+structured agenda (and into the meeting topic, domain and the user's role), then
+confirmation in an editable table — start/end time, speaker, organization and
+topic can all be changed, rows added or removed, and microphone capture is a
+checkbox (on by default).
+
+As soon as that is confirmed, a host — or whoever owns the first agenda slot —
+gets their first cue card (opening / thanks) immediately, without starting the
+meeting. The same structured table is available in the settings panel, and
+"重新初始化会议" re-runs the flow.
+
 ## Requirements
 
 - Windows 10/11 x64.

@@ -34,7 +34,8 @@
     agendaFile: '/dsh-meeting/agenda-file',
     agendaCurrent: '/dsh-meeting/agenda-current',
     turnSpeaker: '/dsh-meeting/turn-speaker',
-    cue: '/dsh-meeting/cue'
+    cue: '/dsh-meeting/cue',
+    agendaEntries: '/dsh-meeting/agenda-entries'
   };
   var STYLE_ID = 'dsh-meeting-style';
   var STORAGE_KEY = 'dsh-meeting:form:v2';
@@ -192,6 +193,10 @@
       '.dshm-menuItem:hover{background:rgba(127,176,255,.16)}',
       '.dshm-menuItem[data-current="true"]{background:rgba(127,176,255,.24);font-weight:650}',
       '.dshm-menuInline{position:static;margin:6px 0 0;max-height:200px}',
+      '.dshm-table{display:flex;flex-direction:column;gap:5px;margin-top:7px}',
+      '.dshm-tableRow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) 26px;gap:4px;align-items:center}',
+      '.dshm-tableHead{font-size:10px;color:var(--dsw-alias-label-caption,#777);gap:4px}',
+      '.dshm-timeInput{font-family:ui-monospace,Consolas,monospace;font-size:11px}',
       '.dshm-cue{padding:7px 0;border-top:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.08))}',
       '.dshm-cue:first-of-type{border-top:0}',
       '.dshm-cueText{margin:4px 0 0;font-size:12px;line-height:1.65;white-space:pre-wrap}',
@@ -375,8 +380,54 @@
     return (value < 600 ? '0' : '') + Math.floor(value / 60) + ':' + (value % 60 < 10 ? '0' : '') + (value % 60);
   }
 
-  function currentAgendaClient(entries) {
-    var list = Array.isArray(entries) ? entries.filter(function (entry) { return entry && entry.startMin !== null && entry.startMin !== undefined; }) : [];
+  // Editable agenda table: the same shape in the setup flow and in settings.
+  function rowsFromEntries(entries) {
+    return (Array.isArray(entries) ? entries : []).map(function (entry) {
+      return {
+        start: entry && entry.startMin !== null && entry.startMin !== undefined ? clockMin(entry.startMin) : '',
+        end: entry && entry.endMin !== null && entry.endMin !== undefined ? clockMin(entry.endMin) : '',
+        speaker: (entry && entry.speaker) || '',
+        org: (entry && entry.org) || '',
+        topic: (entry && entry.topic) || ''
+      };
+    });
+  }
+
+  function entriesFromRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map(function (row) {
+      return {
+        start: String(row.start || '').trim(),
+        end: String(row.end || '').trim(),
+        speaker: String(row.speaker || '').trim(),
+        org: String(row.org || '').trim(),
+        topic: String(row.topic || '').trim()
+      };
+    }).filter(function (row) {
+      return row.start || row.speaker || row.topic;
+    });
+  }
+
+  function setupKey() {
+    return 'dsh-meeting:setup:' + new Date().toISOString().slice(0, 10);
+  }
+
+  function readSetupDone() {
+    try {
+      return localStorage.getItem(setupKey()) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  function markSetupDone() {
+    try {
+      localStorage.setItem(setupKey(), '1');
+    } catch {
+      /* private mode */
+    }
+  }
+
+  function currentAgendaClient(entries) {    var list = Array.isArray(entries) ? entries.filter(function (entry) { return entry && entry.startMin !== null && entry.startMin !== undefined; }) : [];
     if (list.length === 0) return { status: 'empty', entry: null, clock: '' };
     var now = new Date();
     var minutes = now.getHours() * 60 + now.getMinutes();
@@ -1023,6 +1074,9 @@
           var [agendaSource, setAgendaSource] = React.useState('');
           var [agendaMenuOpen, setAgendaMenuOpen] = React.useState(false);
           var [speakerMenuTurn, setSpeakerMenuTurn] = React.useState('');
+          var [agendaRows, setAgendaRows] = React.useState([]);
+          var [rowsDirty, setRowsDirty] = React.useState(false);
+          var [setupDone, setSetupDone] = React.useState(readSetupDone);
           var bodyRef = React.useRef(null);
           var atBottomRef = React.useRef(true);
           var initializedRef = React.useRef(false);
@@ -1566,6 +1620,108 @@
             reader.readAsText(file, 'utf-8');
           }
 
+          // Keep the editable agenda table in sync with the Host, unless the
+          // user is in the middle of editing it.
+          React.useEffect(function () {
+            if (!snapshot || rowsDirty) return;
+            var source = snapshot.active ? snapshot.active.agenda : snapshot.agenda;
+            setAgendaRows(rowsFromEntries(source && source.entries));
+          }, [snapshot && (snapshot.active ? snapshot.active.agenda : snapshot.agenda)
+            ? (snapshot.active ? snapshot.active.agenda : snapshot.agenda).updatedAt
+            : 0, rowsDirty]);
+
+          function updateRow(index, field, value) {
+            setAgendaRows(function (current) {
+              var next = current.slice();
+              next[index] = Object.assign({}, next[index]);
+              next[index][field] = value;
+              return next;
+            });
+            setRowsDirty(true);
+          }
+
+          function saveAgendaRows() {
+            var entries = entriesFromRows(agendaRows);
+            if (entries.length === 0) {
+              notify('日程至少要有一条（时间或主题）');
+              return;
+            }
+            setAgendaBusy(true);
+            api(API.agendaEntries, {
+              entries: entries,
+              topic: form.topic,
+              domain: form.domain,
+              customDomain: form.customDomain,
+              role: profile.role,
+              text: agendaDraft
+            }).then(function (payload) {
+              if (payload.state) setSnapshot(payload.state);
+              setRowsDirty(false);
+              notify('日程已保存（' + entries.length + ' 条）');
+            }).catch(function (error) {
+              notify('保存日程失败：' + error.message);
+            }).then(function () { setAgendaBusy(false); });
+          }
+
+          function renderAgendaTable() {
+            return h('div', { className: 'dshm-table' },
+              h('div', { className: 'dshm-tableRow dshm-tableHead' },
+                h('span', null, '开始'),
+                h('span', null, '结束'),
+                h('span', null, '讲者'),
+                h('span', null, '单位'),
+                h('span', null, '')),
+              agendaRows.map(function (row, index) {
+                return h('div', { key: 'agendaRow' + index, className: 'dshm-tableRow' },
+                  h('input', {
+                    className: 'dshm-input dshm-timeInput', value: row.start, placeholder: '14:00',
+                    onChange: function (event) { updateRow(index, 'start', event.target.value); }
+                  }),
+                  h('input', {
+                    className: 'dshm-input dshm-timeInput', value: row.end, placeholder: '14:30',
+                    onChange: function (event) { updateRow(index, 'end', event.target.value); }
+                  }),
+                  h('input', {
+                    className: 'dshm-input', value: row.speaker, placeholder: '姓名',
+                    onChange: function (event) { updateRow(index, 'speaker', event.target.value); }
+                  }),
+                  h('input', {
+                    className: 'dshm-input', value: row.org, placeholder: '单位',
+                    onChange: function (event) { updateRow(index, 'org', event.target.value); }
+                  }),
+                  h('button', {
+                    type: 'button', className: 'dshm-iconBtn', title: '删除这一行',
+                    onClick: function () {
+                      setAgendaRows(function (current) {
+                        return current.filter(function (_, i) { return i !== index; });
+                      });
+                      setRowsDirty(true);
+                    }
+                  }, '✕'),
+                  h('input', {
+                    className: 'dshm-input', value: row.topic, placeholder: '主题 / 环节',
+                    style: { gridColumn: '1 / span 5' },
+                    onChange: function (event) { updateRow(index, 'topic', event.target.value); }
+                  }));
+              }),
+              h('div', { className: 'dshm-row', style: { marginTop: '6px' } },
+                h('button', {
+                  type: 'button', className: 'dshm-btn', 'data-kind': 'ghost',
+                  onClick: function () {
+                    setAgendaRows(function (current) {
+                      return current.concat([{ start: '', end: '', speaker: '', org: '', topic: '' }]);
+                    });
+                    setRowsDirty(true);
+                  }
+                }, '＋ 添加一行'),
+                h('button', {
+                  type: 'button', className: 'dshm-btn', 'data-kind': 'primary',
+                  disabled: agendaBusy, onClick: saveAgendaRows
+                }, agendaBusy ? '保存中…' : '保存日程'),
+                rowsDirty ? h('span', { className: 'dshm-muted' }, '有未保存的修改') : null)
+            );
+          }
+
           function onAgendaFile(event) {
             var file = event.target.files && event.target.files[0];
             event.target.value = '';
@@ -1799,6 +1955,108 @@
             toast ? h('div', { className: 'dshm-toast', 'data-tone': toast.tone }, toast.message) : null
           );
 
+          function renderWizard() {
+            var cues = snapshot && Array.isArray(snapshot.cues) ? snapshot.cues : [];
+            var cueKindLabel = {
+              opening: '开场致辞', transition: '环节交接', closing: '结束致辞', thanks: '上场感谢', manual: '即时串词'
+            };
+            return h('div', { className: 'dshm-section' },
+              h('div', { className: 'dshm-card' },
+                h('div', { className: 'dshm-cardTitle' }, '① 我是谁', h('span', { className: 'dshm-muted' }, '永久保存')),
+                h('div', { className: 'dshm-grid' },
+                  field('我的姓名', h('input', {
+                    className: 'dshm-input', value: profile.userName, placeholder: '例如：张医生',
+                    onChange: function (event) { setProfile(Object.assign({}, profile, { userName: event.target.value })); }
+                  })),
+                  field('我的单位', h('input', {
+                    className: 'dshm-input', value: profile.userOrg, placeholder: '例如：市医院',
+                    onChange: function (event) { setProfile(Object.assign({}, profile, { userOrg: event.target.value })); }
+                  })),
+                  field('我的角色（AI 按日程判断，可改）', h('select', {
+                    className: 'dshm-select', value: profile.role,
+                    onChange: function (event) { setProfile(Object.assign({}, profile, { role: event.target.value })); }
+                  }, ROLES.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); })))),
+                h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
+                  h('button', { type: 'button', className: 'dshm-btn', 'data-kind': 'primary', onClick: saveProfile }, '保存我的信息'))),
+              h('div', {
+                className: 'dshm-card', 'data-drag': dragOver ? 'true' : 'false',
+                onDragOver: function (event) { event.preventDefault(); setDragOver(true); },
+                onDragEnter: function (event) { event.preventDefault(); setDragOver(true); },
+                onDragLeave: function (event) { event.preventDefault(); setDragOver(false); },
+                onDrop: onAgendaDrop
+              },
+                h('div', { className: 'dshm-cardTitle' }, '② 导入会议日程', h('span', { className: 'dshm-muted' }, 'AI 解析成结构化日程')),
+                h('p', { className: 'dshm-muted' }, '支持 txt / md / csv / json、PDF / Word / PPT / Excel 和截图。也可以直接粘贴日程文字，或把日程截图粘贴到框里。'),
+                h('div', { className: 'dshm-row' },
+                  h('label', { className: 'dshm-btn', 'data-kind': 'small', style: { cursor: 'pointer' } },
+                    '上传 / 拖入日程',
+                    h('input', {
+                      type: 'file',
+                      accept: '.txt,.md,.markdown,.csv,.json,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.odt,.odp,.ods,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,text/plain,text/csv,application/json,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/*',
+                      style: { display: 'none' }, onChange: onAgendaFile
+                    })),
+                  h('button', {
+                    type: 'button', className: 'dshm-btn', 'data-kind': 'primary',
+                    disabled: agendaBusy || agendaDraft.trim().length === 0,
+                    onClick: function () { applyAgenda(agendaDraft, agendaFilename); }
+                  }, agendaBusy ? h('span', null, h('span', { className: 'dshm-spinner' }), ' AI 解析中…') : '应用日程（AI 解析）'),
+                  agendaSource ? h('span', { className: 'dshm-pill', 'data-tone': 'busy' }, '已载入，待解析') : null,
+                  snapshot && snapshot.agenda && snapshot.agenda.parsedBy === 'llm'
+                    ? h('span', { className: 'dshm-pill', 'data-tone': 'good' }, 'AI 已解析')
+                    : null),
+                h('textarea', {
+                  className: 'dshm-textarea', rows: 3, value: agendaDraft, style: { marginTop: '7px' },
+                  placeholder: '14:00-14:30 张医生（市医院） 创面修复病例分享\n14:30-15:00 李主任（省医院）：糖尿病足多学科协作',
+                  onChange: function (event) { setAgendaDraft(event.target.value); setAgendaFilename(''); setAgendaSource(''); },
+                  onPaste: onAgendaPaste
+                }),
+                agendaWarnings.length > 0
+                  ? h('div', { className: 'dshm-warning', style: { marginTop: '6px' } }, agendaWarnings.join('；'))
+                  : null),
+              h('div', { className: 'dshm-card' },
+                h('div', { className: 'dshm-cardTitle' }, '③ 确认会议信息', h('span', { className: 'dshm-muted' }, '都能改')),
+                h('div', { className: 'dshm-grid' },
+                  field('会议主题', h('input', {
+                    className: 'dshm-input', value: form.topic, placeholder: '会议主题',
+                    onChange: function (event) { update('topic', event.target.value); }
+                  })),
+                  field('会议领域', h('select', {
+                    className: 'dshm-select', value: form.domain,
+                    onChange: function (event) { update('domain', event.target.value); }
+                  }, DOMAINS.map(function (item) { return h('option', { key: item.id, value: item.id }, item.label); })))),
+                renderAgendaTable(),
+                h('label', { className: 'dshm-check', style: { marginTop: '8px' } },
+                  h('input', {
+                    type: 'checkbox', checked: form.micEnabled !== false,
+                    onChange: function (event) { update('micEnabled', event.target.checked); if (!micDevices.length) refreshDevices(); }
+                  }),
+                  '同时采集我的麦克风（默认开启，我的发言标为「自己」）'),
+                h('div', { className: 'dshm-row', style: { marginTop: '8px' } },
+                  h('button', {
+                    type: 'button', className: 'dshm-btn', 'data-kind': 'primary',
+                    onClick: function () { markSetupDone(); setSetupDone(true); notify('初始化完成，可以开始听会了'); }
+                  }, '完成初始化'))),
+              cues.length > 0
+                ? h('div', { className: 'dshm-card' },
+                  h('div', { className: 'dshm-cardTitle' }, '为你生成的串词'),
+                  cues.map(function (cue) {
+                    return h('div', { key: cue.key, className: 'dshm-cue' },
+                      h('div', { className: 'dshm-row' },
+                        h('span', {
+                          className: 'dshm-pill',
+                          'data-tone': cue.status === 'done' ? 'good' : 'busy'
+                        }, cueKindLabel[cue.kind] || '串词'),
+                        h('span', { className: 'dshm-muted' }, cue.entryText || '')),
+                      cue.status === 'writing'
+                        ? h('p', { className: 'dshm-muted' }, h('span', { className: 'dshm-spinner' }), ' 正在生成…')
+                        : cue.status === 'error'
+                          ? h('div', { className: 'dshm-warning' }, cue.error || '生成失败')
+                          : h('p', { className: 'dshm-cueText' }, cue.markdown));
+                  }))
+                : null
+            );
+          }
+
           function renderSettings() {
             return h('div', { className: 'dshm-section' },
               h('div', { className: 'dshm-card' },
@@ -1972,23 +2230,14 @@
                 agendaWarnings.length > 0
                   ? h('div', { className: 'dshm-warning', style: { marginTop: '6px' } }, agendaWarnings.join('；'))
                   : null,
-                agendaEntries.length > 0
-                  ? h('div', { className: 'dshm-agendaList' },
-                    agendaEntries.slice(0, 10).map(function (entry, index) {
-                      var isCurrent = agendaCurrent.entry === entry;
-                      return h('div', {
-                        key: index,
-                        className: 'dshm-agendaItem',
-                        'data-current': isCurrent ? 'true' : 'false'
-                      },
-                      h('span', { className: 'dshm-agendaTime' }, entry.startMin !== null && entry.startMin !== undefined
-                        ? clockMin(entry.startMin) + (entry.endMin !== null && entry.endMin !== undefined ? '-' + clockMin(entry.endMin) : '')
-                        : '—'),
-                      h('span', null, agendaEntryText(entry).replace(/^\S+\s*/, ''))
-                      );
-                    })
-                  )
-                  : null
+                // Structured and editable here too: the settings panel and the
+                // setup flow share one table.
+                agendaRows.length > 0 ? renderAgendaTable() : null,
+                h('div', { className: 'dshm-row', style: { marginTop: '6px' } },
+                  h('button', {
+                    type: 'button', className: 'dshm-btn', 'data-kind': 'ghost',
+                    onClick: function () { setSetupDone(false); setShowSettings(false); }
+                  }, '重新初始化会议'))
               ),
               asr && asr.available === false
                 ? h('div', { className: 'dshm-card' },
@@ -2061,6 +2310,10 @@
 
           function renderTranscript() {
             if (!active) {
+              // First open of the day with no meeting yet: guide the setup.
+              if (!setupDone && snapshot && snapshot.hasTodayMeeting === false && !showSettings) {
+                return renderWizard();
+              }
               return h('div', { className: 'dshm-empty' },
                 h('div', { className: 'dshm-emptyIcon' }, h(WaveIcon, null)),
                 h('div', { className: 'dshm-emptyTitle' }, '听听这场会议'),
