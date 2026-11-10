@@ -455,11 +455,18 @@
     });
   }
 
-  function currentAgendaClient(entries) {
-    var list = Array.isArray(entries) ? entries.filter(function (entry) { return entry && entry.startMin !== null && entry.startMin !== undefined; }) : [];
-    if (list.length === 0) return { status: 'empty', entry: null, clock: '' };
+  // A manual pin wins over the clock: when the user says "this is the current
+  // session", it stays current even after its end time has passed.
+  function currentAgendaClient(entries, pinnedIndex) {
+    var all = Array.isArray(entries) ? entries : [];
+    var list = all.filter(function (entry) { return entry && entry.startMin !== null && entry.startMin !== undefined; });
     var now = new Date();
     var minutes = now.getHours() * 60 + now.getMinutes();
+    var pin = pinnedIndex === null || pinnedIndex === undefined ? null : Number(pinnedIndex);
+    if (Number.isInteger(pin) && pin >= 0 && pin < all.length) {
+      return { status: 'pinned', entry: all[pin], clock: clockMin(minutes) };
+    }
+    if (list.length === 0) return { status: 'empty', entry: null, clock: '' };
     var current = null;
     for (var i = 0; i < list.length; i += 1) {
       if (list[i].startMin <= minutes && list[i].endMin !== null && minutes < list[i].endMin) {
@@ -2125,7 +2132,7 @@
             });
             return list;
           })();
-          var agendaCurrent = currentAgendaClient(agendaEntries);
+          var agendaCurrent = currentAgendaClient(agendaEntries, agenda && agenda.pinnedIndex);
 
           if (!snapshot) {
             return h('div', { className: 'dshm-panel' },
