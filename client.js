@@ -28,7 +28,8 @@
     summary: '/dsh-meeting/summary',
     speaker: '/dsh-meeting/speaker',
     agenda: '/dsh-meeting/agenda',
-    agendaImage: '/dsh-meeting/agenda-image'
+    agendaImage: '/dsh-meeting/agenda-image',
+    agendaFile: '/dsh-meeting/agenda-file'
   };
   var STYLE_ID = 'dsh-meeting-style';
   var STORAGE_KEY = 'dsh-meeting:form:v2';
@@ -1305,46 +1306,48 @@
             }).then(function () { setAgendaBusy(false); });
           }
 
-          function applyAgendaImage(dataUrl, filename) {
+          function applyAgendaAttachment(dataUrl, filename) {
             setAgendaBusy(true);
-            api(API.agendaImage, { imageBase64: dataUrl, filename: filename }).then(function (payload) {
+            api(API.agendaFile, { fileBase64: dataUrl, filename: filename }).then(function (payload) {
               if (payload.state) setSnapshot(payload.state);
               var agenda = payload.agenda || (payload.state && payload.state.agenda);
               if (agenda && typeof agenda.text === 'string') setAgendaDraft(agenda.text);
               setAgendaWarnings(agenda && Array.isArray(agenda.warnings) ? agenda.warnings : []);
-              notify('已用本机 OCR 识别日程图片（' + ((agenda && agenda.entries && agenda.entries.length) || 0) + ' 条）');
+              notify('已从日程文件提取文字（' + ((agenda && agenda.entries && agenda.entries.length) || 0) + ' 条）');
             }).catch(function (error) {
-              notify('识别日程图片失败：' + error.message);
+              notify('读取日程文件失败：' + error.message);
             }).then(function () { setAgendaBusy(false); });
           }
 
           function applyAgendaFile(file) {
             if (!file) return;
-            var isImage = /^image\//i.test(file.type || '') || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(file.name || '');
-            if (isImage) {
-              if (file.size > 8 * 1024 * 1024) {
-                notify('日程图片太大（上限 8MB）');
+            var name = file.name || '';
+            var type = file.type || '';
+            var textLike = /^text\//i.test(type) || /\.(txt|md|markdown|csv|json)$/i.test(name);
+            if (!textLike) {
+              if (file.size > 20 * 1024 * 1024) {
+                notify('日程文件太大（上限 20MB）');
                 return;
               }
-              var imageReader = new FileReader();
-              imageReader.onload = function () {
-                setAgendaFilename(file.name || '');
-                applyAgendaImage(String(imageReader.result || ''), file.name || '');
+              var attachmentReader = new FileReader();
+              attachmentReader.onload = function () {
+                setAgendaFilename(name);
+                applyAgendaAttachment(String(attachmentReader.result || ''), name);
               };
-              imageReader.onerror = function () { notify('读取日程图片失败'); };
-              imageReader.readAsDataURL(file);
+              attachmentReader.onerror = function () { notify('读取日程文件失败'); };
+              attachmentReader.readAsDataURL(file);
               return;
             }
             if (file.size > 40000) {
-              notify('日程文件太大（上限 40KB）');
+              notify('文本日程太大（上限 40KB）；PDF/Word/PPT 等请直接上传文件');
               return;
             }
             var reader = new FileReader();
             reader.onload = function () {
               var text = String(reader.result || '');
               setAgendaDraft(text);
-              setAgendaFilename(file.name);
-              applyAgenda(text, file.name);
+              setAgendaFilename(name);
+              applyAgenda(text, name);
             };
             reader.onerror = function () { notify('读取日程文件失败'); };
             reader.readAsText(file, 'utf-8');
@@ -1654,13 +1657,13 @@
               },
                 h('div', { className: 'dshm-cardTitle' }, '会议日程',
                   h('span', { className: 'dshm-muted' }, agendaCurrent.status === 'current' ? '当前：' + agendaEntryText(agendaCurrent.entry) : agendaCurrent.status === 'next' ? '下一项：' + agendaEntryText(agendaCurrent.entry) : '未设置时间')),
-                h('p', { className: 'dshm-muted' }, '上传、拖拽或直接粘贴日程：支持 txt / md / csv / json，也支持 png / jpg / webp / bmp 截图（本机 Windows OCR，图片不离开电脑）。拖拽文件到这里，或把截图直接粘贴到下面的输入框。'),
+                h('p', { className: 'dshm-muted' }, '上传、拖拽或直接粘贴日程：支持 txt / md / csv / json，也支持 PDF / Word / PPT / Excel 和 png / jpg / webp / bmp 图片。Office/PDF 由 DSH 自带的 LibreOffice 渲染成本机页面后 OCR；图片直接用 Windows OCR。文件不会离开电脑。'),
                 h('div', { className: 'dshm-row', style: { marginTop: '6px' } },
                   h('label', { className: 'dshm-btn', 'data-kind': 'small', style: { cursor: 'pointer' } },
                     '上传 / 拖入日程',
                     h('input', {
                       type: 'file',
-                      accept: '.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,text/plain,text/csv,application/json,image/*',
+                      accept: '.txt,.md,.markdown,.csv,.json,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.odt,.odp,.ods,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,text/plain,text/csv,application/json,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/*',
                       style: { display: 'none' }, onChange: onAgendaFile
                     })
                   ),
@@ -1669,7 +1672,9 @@
                     disabled: agendaBusy || agendaDraft.trim().length === 0,
                     onClick: function () { applyAgenda(agendaDraft, agendaFilename); }
                   }, agendaBusy ? h('span', { className: 'dshm-spinner' }) : '应用日程'),
-                  agenda && agenda.imageName ? h('span', { className: 'dshm-pill', 'data-tone': 'good' }, '图片 OCR') : null
+                  agenda && (agenda.fileName || agenda.imageName)
+                    ? h('span', { className: 'dshm-pill', 'data-tone': 'good' }, agenda.source === 'image' ? '图片 OCR' : '文件提取')
+                    : null
                 ),
                 h('textarea', {
                   className: 'dshm-textarea', rows: 3, value: agendaDraft, style: { marginTop: '7px' },

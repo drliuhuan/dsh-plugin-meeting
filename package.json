@@ -26,7 +26,7 @@
     "icon.svg"
   ],
   "scripts": {
-    "check": "node --check index.js && node --check client.js && node --check lib/meeting.mjs && node --check lib/routes.mjs && node --check lib/audio.mjs && node --check lib/native.mjs && node --check lib/asr.mjs && node --check lib/ai.mjs && node --check lib/speaker.mjs && node --check lib/agenda.mjs && node --check lib/util.mjs",
+    "check": "node --check index.js && node --check client.js && node --check lib/meeting.mjs && node --check lib/routes.mjs && node --check lib/audio.mjs && node --check lib/native.mjs && node --check lib/asr.mjs && node --check lib/ai.mjs && node --check lib/speaker.mjs && node --check lib/agenda.mjs && node --check lib/office.mjs && node --check lib/util.mjs",
     "selftest": "node scripts/selftest.mjs",
     "native:build": "node scripts/build-native.mjs",
     "native:check": "node scripts/build-native.mjs --check"

@@ -17,11 +17,13 @@ already configured in DSH.
 - Domain-aware LLM correction (medical, technology, gaming, finance, legal,
   education, manufacturing, marketing, research, custom) using the meeting topic
   and an optional glossary.
-- Meeting agenda upload/paste/drag-and-drop (`txt`, `md`, `csv`, `json`) and
-  image screenshots (`png`, `jpg`, `webp`, `bmp`) with local Windows OCR: time
-  ranges, speaker names and organizations become the current-item indicator,
-  speaker-name suggestions, and reference context for correction, minutes and
-  Q&A.
+- Meeting agenda upload/paste/drag-and-drop (`txt`, `md`, `csv`, `json`), Office
+  documents (`PDF`, `Word`, `PPT`, `Excel`, ODF), and images (`png`, `jpg`,
+  `webp`, `bmp`): Word/PPT/ODF text is read directly; PDF, legacy Office and
+  images are rendered locally with DSH's LibreOffice kit and read with Windows
+  OCR. Time ranges, speaker names and organizations become the current-item
+  indicator, speaker-name suggestions, and reference context for correction,
+  minutes and Q&A.
 - Local CAM++ voice clustering into 发言人 1/2/3 (about 27 MB): consecutive
   turns by one speaker are merged into one continuous block; a one-minute pass
   re-corrects the whole conversation to join lines split by the 10-second ASR
