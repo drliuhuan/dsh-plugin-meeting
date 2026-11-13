@@ -1,4 +1,4 @@
-# dsh-plugin-meeting
+# dsh-plugin-live-meeting
 
 A DeepSeek Harness plugin that listens to any meeting playing through the
 default Windows render device, transcribes it locally with SenseVoice, has the
@@ -107,7 +107,10 @@ meeting. The same structured table is available in the settings panel, and
 ## Install
 
 ```powershell
-dsh plugin --profile desktop add D:\path\to\dsh-plugin-meeting
+# from npm
+dsh plugin --profile desktop add dsh-plugin-live-meeting
+# or from a local checkout
+dsh plugin --profile desktop add D:\path\to\dsh-plugin-live-meeting
 ```
 
 Then enable **Voice Input** and **Meeting Assistant** in DSH's plugin manager.

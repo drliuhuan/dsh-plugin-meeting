@@ -1,4 +1,4 @@
-# AGENTS.md — dsh-plugin-meeting
+# AGENTS.md — dsh-plugin-live-meeting
 
 These instructions apply to every change in this repository. They are part of
 the project contract, not optional advice.

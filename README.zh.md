@@ -1,4 +1,4 @@
-# dsh-plugin-meeting
+# dsh-plugin-live-meeting
 
 DeepSeek Harness 的**会议助手**：在本机实时听取任何通过默认播放设备发声的会议，用本地 SenseVoice 离线转写，再由 DSH 当前配置的模型按**会议领域与主题**校正措辞、按需翻译，滚动生成会议纪要，并允许你针对会议内容提问——问题会优先参考纪要，需要时通过 DSH 的联网搜索补充资料。
 
@@ -46,26 +46,29 @@ DeepSeek Harness 的**会议助手**：在本机实时听取任何通过默认�
 
 ```powershell
 # 在 DSH 仓库/桌面版中，把插件链接进 desktop profile
-dsh plugin --profile desktop add D:\path\to\dsh-plugin-meeting
+dsh plugin --profile desktop add D:\path\to\dsh-plugin-live-meeting
 ```
 
 然后在 DSH 的「插件管理」里启用：
 
 1. **官方「语音输入」组合包**（首次必需）；
-2. **会议助手**（`dsh-plugin-meeting`）。
+2. **会议助手**（`dsh-plugin-live-meeting`）。
 
 如果使用手动链接，也可以把包目录放到 profile 的 `node_modules` 下，并在 profile 的 `cordis.patch.yml` 追加：
 
 ```yaml
 - insert:
     - id: meeting
-      name: dsh-plugin-meeting
+      name: dsh-plugin-live-meeting
 ```
 
 ### 方式二：从 npm 安装（发布后）
 
 ```text
-plugin_manager action=install_bundle target=dsh-plugin-meeting@0.2.0
+dsh plugin --profile desktop add dsh-plugin-live-meeting
+
+# 或通过 plugin_manager 工具
+plugin_manager action=install_bundle target=dsh-plugin-live-meeting@0.2.0
 ```
 
 安装后按提示启用「语音输入」组合包。
@@ -257,7 +260,7 @@ scripts/build-native.mjs  重新编译 native exe
 ```
 
 ```powershell
-cd dsh-plugin-meeting
+cd dsh-plugin-live-meeting
 npm run check            # node --check 全部入口
 npm run selftest         # 日程解析、讲词提示词、声纹聚类、重采样/VAD 的纯本地测试
 node scripts/build-native.mjs --check

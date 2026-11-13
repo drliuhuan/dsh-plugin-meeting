@@ -4,5 +4,5 @@
 # resolves a package's browser artifact from its Loader entry name.
 - insert:
     - id: meeting
-      name: dsh-plugin-meeting
+      name: dsh-plugin-live-meeting
 

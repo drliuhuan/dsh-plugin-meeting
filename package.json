@@ -1,7 +1,7 @@
 {
-  "name": "dsh-plugin-meeting",
+  "name": "dsh-plugin-live-meeting",
   "version": "0.2.0",
-  "description": "DeepSeek Harness Web UI plugin: capture meeting system audio, transcribe with local SenseVoice, let DSH's LLM correct domain wording and optionally translate, keep a live summary, and answer questions from the meeting with web lookup.",
+  "description": "DeepSeek Harness Web UI plugin: capture meeting system audio, transcribe with local SenseVoice, let DSH's LLM correct domain wording and optionally translate, keep a live summary, and answer questions from the meeting with web lookup. Windows 10/11 x64 only.",
   "type": "module",
   "license": "MIT",
   "main": "index.js",
@@ -42,15 +42,16 @@
     "meeting-minutes"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "dsh": ">=0.2.1-rc.1 <0.3.0-0"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/drliuhuan/dsh-plugin-meeting.git"
+    "url": "git+https://github.com/drliuhuan/dsh-plugin-live-meeting.git"
   },
-  "homepage": "https://github.com/drliuhuan/dsh-plugin-meeting#readme",
+  "homepage": "https://github.com/drliuhuan/dsh-plugin-live-meeting#readme",
   "bugs": {
-    "url": "https://github.com/drliuhuan/dsh-plugin-meeting/issues"
+    "url": "https://github.com/drliuhuan/dsh-plugin-live-meeting/issues"
   },
   "dsh": {
     "bundle": {
@@ -60,5 +61,9 @@
       "platform": "web",
       "immediately": true
     }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

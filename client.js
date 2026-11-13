@@ -1,4 +1,4 @@
-// dsh-plugin-meeting — Web client half.
+// dsh-plugin-live-meeting — Web client half.
 //
 // Loaded as a classic script through DSH's module loader, so React comes from
 // the loader's `require` and nothing is imported at module scope.  Adds a
@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  var PLUGIN_ID = 'dsh-plugin-meeting';
+  var PLUGIN_ID = 'dsh-plugin-live-meeting';
   var API = {
     state: '/dsh-meeting/state',
     events: '/dsh-meeting/events',

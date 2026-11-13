@@ -1,4 +1,4 @@
-// dsh-plugin-meeting — Host half.
+// dsh-plugin-live-meeting — Host half.
 //
 // Captures the Windows default render endpoint with WASAPI loopback, transcribes
 // with DSH's local SenseVoice service, asks DSH's configured model to proofread
